@@ -1,0 +1,29 @@
+services:
+  web:
+    build: .
+    ports:
+      # container : host
+      - "8000:8000"
+    command: python /app/manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app # bind mount - entire directory "." -> /working directory on the container
+    env_file:
+      - ./env/django.env
+    depends_on:
+      - db
+
+  db:
+    image: postgres:13
+    volumes:
+      # docker hub postgres default:
+      - postgres_data:/var/lib/postgresql/data
+      # environment:
+      # - "POSTGRES_HOST_AUTH_METHOD=trust" # allows connection without password
+    env_file:
+      - ./env/django.env
+
+#named volumes must be listed
+volumes:
+  postgres_data:
+
+

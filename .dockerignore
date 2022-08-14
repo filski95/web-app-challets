@@ -1,0 +1,11 @@
+venv
+.venv
+
+#GIT
+.git
+.gitignore
+
+# support txt file.
+commands.txt
+
+
