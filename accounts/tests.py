@@ -1,7 +1,9 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from rest_framework.test import APITestCase
 
 from .models import MyCustomUser
+from .serializers import MyCustomUserSerializer
 
 
 class MyCustomUserTest(TestCase):
@@ -47,3 +49,9 @@ class MyCustomUserTest(TestCase):
             testuser.objects.create_superuser(
                 email="super@user.com", name="testname", surname="testsurname", password="foo", is_superuser=False
             )
+
+
+class MyCustomUserTestAPI(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.serializer = MyCustomUserSerializer

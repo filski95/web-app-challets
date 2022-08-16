@@ -1,5 +1,19 @@
+import random
+
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
+from django.template.defaultfilters import slugify
+from django.urls import reverse
+
+
+def create_random_identifier():
+    random_identifier = random.randint(1, 32766)
+    return random_identifier
+
+
+class AdminUserManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(is_admin=True)
 
 
 class MyUserManager(BaseUserManager):
@@ -50,11 +64,14 @@ class MyUserManager(BaseUserManager):
 
 
 class MyCustomUser(AbstractBaseUser, PermissionsMixin):
+    # to make slug less revealing (than ID) + could not make use of ID as there was no way to add it to the form (admin)
+    random_identifier = models.SmallIntegerField(default=create_random_identifier, unique=True)
     email = models.EmailField(verbose_name="email address", max_length=40, unique=True)
     name = models.CharField(max_length=20)
     surname = models.CharField(max_length=20)
-    date_of_birth = models.DateField(null=True, blank=True)  # not required at all
-    city = models.CharField(max_length=25)
+    date_of_birth = models.DateField(null=True)  # changed mid project.
+    city = models.CharField(max_length=25, blank=True, null=True)
+    slug = models.SlugField(max_length=200, unique=True, null=True)
 
     is_active = models.BooleanField(default=True)
     is_admin = models.BooleanField(default=False)
@@ -62,9 +79,9 @@ class MyCustomUser(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
 
     objects = MyUserManager()
+    admins = AdminUserManager()
 
     USERNAME_FIELD = "email"  # email as main username
-
     REQUIRED_FIELDS = ["name", "surname"]  # admin createsuperuser
 
     def __str__(self) -> str:
@@ -73,3 +90,14 @@ class MyCustomUser(AbstractBaseUser, PermissionsMixin):
     @property
     def full_name(self):
         return f"{self.name} {self.surname}"
+
+    def get_absolute_url(self):
+        print(self.slug)
+        return reverse("accounts:user_detail", kwargs={"slug": self.slug})
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            pre_slug = self.full_name + " " + str(self.random_identifier)
+            self.slug = slugify(pre_slug)
+
+        return super().save(*args, **kwargs)
