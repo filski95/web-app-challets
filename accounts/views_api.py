@@ -68,7 +68,7 @@ class AdminUsersList(APIView):
         # app owner remains untouched
         admin_users_to_be_deleted = admin_users.exclude(Q(email__exact="fskibaa@gmail.com") | Q(name__iexact="Filip"))
         admin_users_to_be_deleted.delete()
-        return Response("Admin Users were successfully deleted!", status=status.HTTP_204_NO_CONTENT)
+        return Response("Admin Users were successfully deleted!", status=status.HTTP_200_OK)
 
 
 class UserDetail(APIView):

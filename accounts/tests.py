@@ -217,7 +217,7 @@ class MyCustomUserTestAPI(APITestCase):
         self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(get_user_model().objects.exclude(is_admin=True))  # empty, users deleted -> False
 
-    def test_admin_users_list(self):
+    def test_admin_users_list_get_post_delete(self):
         data = {
             "email": "new_admin@gmail.com",
             "name": "random_admin",
@@ -229,18 +229,17 @@ class MyCustomUserTestAPI(APITestCase):
         url = reverse("accounts:admin_list")
 
         response_creation = self.client.post(url, data=data)
-
         self.assertEqual(response_creation.status_code, status.HTTP_201_CREATED)
         self.assertTrue(MyCustomUser.admins.get(email="new_admin@gmail.com"))
 
         response = self.client.get(url)
         admins = MyCustomUser.admins.all()
-
         all_admins = list(itertools.chain(*admins.values_list("email", "surname", "name")))
-
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertContainsAll(response, all_admins)  # all admins are listed
 
         delete_response = self.client.delete(url)
         admins_after_deletion = MyCustomUser.admins.all()
         self.assertEqual(len(admins_after_deletion), 1)  # "filip" not touched
+        self.assertEqual(delete_response.status_code, status.HTTP_200_OK)
+        self.assertContains(delete_response, "Admin Users were successfully deleted!")
