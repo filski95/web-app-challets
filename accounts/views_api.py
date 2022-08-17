@@ -1,7 +1,6 @@
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
 from rest_framework import status
-from rest_framework.mixins import UpdateModelMixin
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -9,7 +8,7 @@ from .models import MyCustomUser
 from .serializers import MyCustomUserSerializer
 
 
-class UsersList(APIView):
+class UsersListCreate(APIView):
     """View to list all users in the system and creation of new ones."""
 
     serializer_class = MyCustomUserSerializer  # without it, browsable API display basic form Content Type and Content
@@ -31,6 +30,7 @@ class UsersList(APIView):
 
         if serializer.is_valid(raise_exception=True):
             serializer.save()
+
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -59,19 +59,19 @@ class AdminUsersList(APIView):
         if serializer.is_valid(raise_exception=True):
             # passing argument so that it pops up in the "validated data" in serializer's create method
             serializer.save(admin=True)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(f"Admin user: {serializer.data.get('name')} created", status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, format=None):
         admin_users = MyCustomUser.admins.all()
 
         # app owner remains untouched
-        admin_users_to_be_deleted = admin_users.exclude(Q(email__exact="fskibaa@gmail.com") | Q(name="Filip"))
+        admin_users_to_be_deleted = admin_users.exclude(Q(email__exact="fskibaa@gmail.com") | Q(name__iexact="Filip"))
         admin_users_to_be_deleted.delete()
         return Response("Admin Users were successfully deleted!", status=status.HTTP_204_NO_CONTENT)
 
 
-class UserDetail(APIView, UpdateModelMixin):
+class UserDetail(APIView):
     """detail view for all users, regardles if admin or not"""
 
     serializer_class = MyCustomUserSerializer
@@ -113,5 +113,5 @@ class UserDetail(APIView, UpdateModelMixin):
 
         if serializer.is_valid():
             serializer.save()
-            return Response(serializer.data, status=status.HTTP_206_PARTIAL_CONTENT)
+            return Response({"message": "changes made"}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

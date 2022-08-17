@@ -17,7 +17,7 @@ class AdminUserManager(models.Manager):
 
 
 class MyUserManager(BaseUserManager):
-    def create_user(self, email, name, surname, password=None, **extra_fields):
+    def create_user(self, email, name, surname, password, **extra_fields):
         """
         Creates and saves a User with the given email, date of
         birth and password.
@@ -36,7 +36,7 @@ class MyUserManager(BaseUserManager):
         user.save()
         return user
 
-    def create_superuser(self, email, name, surname, password=None, **extra_fields):
+    def create_superuser(self, email, name, surname, password, **extra_fields):
         """
         Creates and saves a superuser with the given email, date of
         birth and password.

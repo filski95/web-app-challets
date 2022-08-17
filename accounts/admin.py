@@ -35,6 +35,7 @@ class UserAdmin(BaseUserAdmin):
                     "name",
                     "surname",
                     "slug",
+                    "random_identifier",
                 ),
             },
         ),
