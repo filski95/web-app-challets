@@ -1,7 +1,15 @@
+import itertools
+from datetime import date
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from rest_framework import status
+from rest_framework.reverse import reverse
+from rest_framework.test import APIRequestFactory, APITestCase
 
 from .models import MyCustomUser
+from .serializers import MyCustomUserSerializer
+from .views_api import UsersListCreate
 
 
 class MyCustomUserTest(TestCase):
@@ -16,7 +24,9 @@ class MyCustomUserTest(TestCase):
 
     def test_user_creation(self):
 
-        testuser = MyCustomUser.objects.create_user(email="test@gmail.com", name="testname", surname="testsurname")
+        testuser = MyCustomUser.objects.create_user(
+            email="test@gmail.com", name="testname", surname="testsurname", password="adminadmin"
+        )
 
         self.assertEqual(testuser.name, "testname")
         self.assertNotEqual(testuser.name, "lalal")
@@ -30,7 +40,7 @@ class MyCustomUserTest(TestCase):
     def test_superuser_creation(self):
 
         testuser = MyCustomUser.objects.create_superuser(
-            email="test@gmail.com", name="testname", surname="testsurname"
+            email="test@gmail.com", name="testname", surname="testsurname", password="admin"
         )
 
         self.assertEqual(testuser.name, "testname")
@@ -45,5 +55,191 @@ class MyCustomUserTest(TestCase):
 
         with self.assertRaises(ValueError):
             testuser.objects.create_superuser(
-                email="super@user.com", name="testname", surname="testsurname", password="foo", is_superuser=False
+                email="super@user.com",
+                name="testname",
+                surname="testsurname",
+                password="foo",
+                is_superuser=False,
             )
+
+
+class MyCustomUserTestAPI(APITestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.serializer = MyCustomUserSerializer
+
+        cls.testuser = MyCustomUser.objects.create_user(
+            email="test@gmail.com",
+            name="testname",
+            surname="testsurname",
+            date_of_birth=date(1995, 10, 10),
+            password="adminadmin1",
+        )
+
+        cls.admin_user = MyCustomUser.objects.create_superuser(
+            email="admin@gmail.com",
+            name="filip",
+            surname="admins",
+            date_of_birth=date(1995, 10, 10),
+            password="adminadmin1",
+        )
+
+    def assertContainsAny(self, response, texts, status_code=200, msg_prefix="", html=False):
+        """assert contains for multiple values"""
+        total_count = 0
+        for text in texts:
+            text_repr, real_count, msg_prefix = self._assert_contains(response, text, status_code, msg_prefix, html)
+            total_count += real_count
+        self.assertTrue(total_count != 0)
+
+    def assertContainsAll(self, response, texts, status_code=200, msg_prefix="", html=False):
+        """assert contains for multiple values"""
+        total_count = 0
+        loops = 0
+        for text in texts:
+            text_repr, real_count, msg_prefix = self._assert_contains(response, text, status_code, msg_prefix, html)
+            if real_count:
+                # disregarding number of found items, just add 1 if sth found
+                total_count += 1
+            # add each loop
+            loops += 1
+        # if all "texts" were found then loops and total_count are the same
+        # otherwise at least 1 item was not found
+        self.assertTrue(total_count == loops)
+
+    def test_user_detail_get(self):
+        response = self.client.get(reverse("accounts:user_detail", kwargs={"slug": self.testuser.slug}))
+
+        user_outputed = MyCustomUser.objects.filter(name=self.testuser.name).values_list(
+            "email", "surname", "name", "email", "date_of_birth"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertContainsAny(response, *user_outputed)
+
+    def test_user_detail_delete(self):
+        response = self.client.delete(reverse("accounts:user_detail", kwargs={"slug": self.testuser.slug}))
+        u = self.testuser
+
+        self.assertEqual(response.data, f"{u.name} {u.surname} {u.random_identifier} has been deleted")
+        self.assertEqual(response.content, b"")
+
+    def test_user_detail_patch_email(self):
+        """email change - ok unless same email already taken"""
+        url = reverse("accounts:user_detail", kwargs={"slug": self.testuser.slug})
+
+        data = {"email": "change_test@gmail.com"}
+        response = self.client.patch(
+            url,
+            data=data,
+        )
+        # reload to see the update - without it the old one shows up
+        self.testuser.refresh_from_db()
+        self.assertEqual(self.testuser.email, data.get("email"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # duplicates not allowed:
+        temp_user = MyCustomUser.objects.create_user(
+            email="test@g.com", name="test", surname="tests", date_of_birth=date(1995, 10, 10), password="admin"
+        )
+        factory = APIRequestFactory()
+        data_temp = {"email": temp_user.email}
+        request = factory.patch(url, data=data_temp)
+        view = UsersListCreate.as_view()
+        response = view(request, slug=self.testuser.slug)
+
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertNotEqual(self.testuser.email, data_temp.get("email"))
+
+    def test_user_detail_patch_name_surname(self):
+        """name and surname cannot be the same"""
+
+        data = {"surname": "testname"}
+
+        response = self.client.patch(reverse("accounts:user_detail", kwargs={"slug": self.testuser.slug}), data=data)
+
+        self.testuser.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertNotEqual(self.testuser.surname, data.get("surname"))  # no change
+
+    def test_user_detail_change_password(self):
+        initial_password = self.testuser.password
+        data = {"password": "adminadmin123", "password2": "adminadmin123"}  # nb + letter + 8 char
+        data_wrong = {"password": "adminadmin", "password2": "adminadmin"}  # lack of nb
+        data_one_password = {"password": "adminadmin1"}  # only 1 password
+
+        url = reverse("accounts:user_detail", kwargs={"slug": self.testuser.slug})
+
+        response_data = self.client.patch(url, data=data)
+        self.testuser.refresh_from_db()
+        changed_password = self.testuser.password
+
+        response_data_wrong = self.client.patch(url, data=data_wrong)
+        self.testuser.refresh_from_db()
+        error_msg = str(response_data_wrong.data.get("non_field_errors")[0])
+
+        password_not_changed_error = self.testuser.password
+
+        response_data_one_password = self.client.patch(url, data=data_one_password)
+
+        self.assertEqual(response_data.status_code, status.HTTP_200_OK)
+        self.assertNotEqual(initial_password, changed_password)
+        self.assertContains(response_data, "changes made")
+        self.assertEqual(response_data_wrong.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(changed_password, password_not_changed_error)
+        self.assertEqual(error_msg, "Passwords must match, have at least 8 characters at least 1 number and letter")
+        self.assertEqual(response_data_one_password.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_users_list_post_get_delete(self):
+        data = {
+            "name": "filip",
+            "surname": "test",
+            "email": "f@gmail.com",
+            "date_of_birth": "1995-12-12",
+            "city": "sosnowiec",
+            "password": "admin1234123",
+            "password2": "admin1234123",
+        }
+        # testing post / user creation
+        response = self.client.post(reverse("accounts:users_list"), data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        # testing get / list of users
+        get_response = self.client.get(reverse("accounts:users_list"))
+        self.assertEqual(get_response.status_code, status.HTTP_200_OK)
+        self.assertContainsAny(get_response, data)
+
+        self.assertNotContains(get_response, self.admin_user.email)
+
+        # testing delete / user deletion
+        delete_response = self.client.delete("/accounts/users/")
+        self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(get_user_model().objects.exclude(is_admin=True))  # empty, users deleted -> False
+
+    def test_admin_users_list_get_post_delete(self):
+        data = {
+            "email": "new_admin@gmail.com",
+            "name": "random_admin",
+            "surname": "admin_surname",
+            "date_of_birth": date(1995, 10, 10),
+            "password": "adminadmin1",
+            "password2": "adminadmin1",
+        }
+        url = reverse("accounts:admin_list")
+
+        response_creation = self.client.post(url, data=data)
+        self.assertEqual(response_creation.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(MyCustomUser.admins.get(email="new_admin@gmail.com"))
+
+        response = self.client.get(url)
+        admins = MyCustomUser.admins.all()
+        all_admins = list(itertools.chain(*admins.values_list("email", "surname", "name")))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertContainsAll(response, all_admins)  # all admins are listed
+
+        delete_response = self.client.delete(url)
+        admins_after_deletion = MyCustomUser.admins.all()
+        self.assertEqual(len(admins_after_deletion), 1)  # "filip" not touched
+        self.assertEqual(delete_response.status_code, status.HTTP_200_OK)
+        self.assertContains(delete_response, "Admin Users were successfully deleted!")

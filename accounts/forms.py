@@ -6,7 +6,7 @@ from .models import MyCustomUser
 class CustomUserCreationForm(UserCreationForm):
     class Meta:
         model = MyCustomUser
-        fields = ("email", "name", "surname")
+        fields = ("email", "name", "surname", "id")
 
 
 class CustomUserChangeForm(UserChangeForm):
