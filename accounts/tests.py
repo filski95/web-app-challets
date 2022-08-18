@@ -152,16 +152,25 @@ class MyCustomUserTestAPI(APITestCase):
         self.assertNotEqual(self.testuser.email, data_temp.get("email"))
 
     def test_user_detail_patch_name_surname(self):
-        """name and surname cannot be the same"""
+        """
+        - name and surname cannot be the same
+        - slug must be updated after a successful change
+        """
 
         data = {"surname": "testname"}
 
         response = self.client.patch(reverse("accounts:user_detail", kwargs={"slug": self.testuser.slug}), data=data)
 
         self.testuser.refresh_from_db()
-
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertNotEqual(self.testuser.surname, data.get("surname"))  # no change
+
+        data = {"surname": "testsurname"}
+        r_success = self.client.patch(reverse("accounts:user_detail", kwargs={"slug": self.testuser.slug}), data=data)
+
+        self.testuser.refresh_from_db()
+        name, surname, identifier = self.testuser.slug.split("-")
+        self.assertEqual(surname, data.get("surname"))  # slug updates after name/surname change
 
     def test_user_detail_change_password(self):
         initial_password = self.testuser.password

@@ -99,7 +99,6 @@ class MyCustomUser(AbstractBaseUser, PermissionsMixin):
         return f"{self.name} {self.surname}"
 
     def get_absolute_url(self):
-        print(self.slug)
         return reverse("accounts:user_detail", kwargs={"slug": self.slug})
 
     def save(self, *args, **kwargs):
