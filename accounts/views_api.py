@@ -41,7 +41,7 @@ class UsersListCreate(APIView):
 
 
 class AdminUsersList(APIView):
-    """View to list all admin users in the system and creation of new ones."""
+    """View to list all admin users in the system and create new ones."""
 
     serializer_class = MyCustomUserSerializer
 

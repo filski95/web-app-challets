@@ -64,6 +64,13 @@ class MyUserManager(BaseUserManager):
 
 
 class MyCustomUser(AbstractBaseUser, PermissionsMixin):
+    """
+    - Linked to the Customer profile model in bookings.
+    """
+
+    class Meta:
+        verbose_name_plural = "Users"
+
     # to make slug less revealing (than ID) + could not make use of ID as there was no way to add it to the form (admin)
     random_identifier = models.SmallIntegerField(default=create_random_identifier, unique=True)
     email = models.EmailField(verbose_name="email address", max_length=40, unique=True)
@@ -96,8 +103,9 @@ class MyCustomUser(AbstractBaseUser, PermissionsMixin):
         return reverse("accounts:user_detail", kwargs={"slug": self.slug})
 
     def save(self, *args, **kwargs):
-        if not self.slug:
-            pre_slug = self.full_name + " " + str(self.random_identifier)
+        pre_slug = self.full_name + " " + str(self.random_identifier)
+        # creating slug when new new user is created and updates the slug when existing user's name/surname are changed
+        if not self.slug or pre_slug != self.slug:
             self.slug = slugify(pre_slug)
 
         return super().save(*args, **kwargs)
