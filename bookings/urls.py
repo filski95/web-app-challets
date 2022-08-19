@@ -8,6 +8,5 @@ app_name = "bookings"
 urlpatterns = [
     path("", main_api_view.api_root),
     path("customers/", views_api.customer_profiles, name="customers"),
-    path("customers/", views_api.customer_profiles, name="customers"),
-    path("customers/<int:pk>", views_api.single_profile, name="customers"),
+    path("customers/<int:pk>", views_api.single_profile, name="single_customer"),
 ]

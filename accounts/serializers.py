@@ -18,7 +18,7 @@ class MyCustomUserSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, required=True)
     password2 = serializers.CharField(write_only=True, required=True)
     random_identifier = serializers.IntegerField(default=create_random_identifier, read_only=True)
-    customerprofile = serializers.PrimaryKeyRelatedField(many=False, read_only=True)
+    customerprofile = serializers.HyperlinkedRelatedField(read_only=True, view_name="bookings:single_customer")
     url = serializers.HyperlinkedIdentityField(read_only=True, view_name="accounts:user_detail", lookup_field="slug")
 
     class Meta:
