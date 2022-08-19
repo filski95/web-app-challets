@@ -8,14 +8,14 @@ from .models import CustomerProfile
 @receiver(post_save, sender=MyCustomUser)
 def create_profile(sender, instance, created, **kwargs):
     """profile is created right after user"""
-    if created:
+    if created and instance.is_admin is False:
         CustomerProfile.objects.create(user=instance, first_name=instance.name, surname=instance.surname)
 
 
 @receiver(post_save, sender=MyCustomUser)
 def update_profiles(sender, instance, created, **kwargs):
 
-    if not created:
+    if not created and instance.is_admin is False:
         # get name and surname out of the queryset (1 item only)
         # MyCustomUser.objects.select_related("customerprofile").filter(id=instance.id)
 

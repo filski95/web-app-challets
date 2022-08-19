@@ -11,22 +11,22 @@ from .serializers import MyCustomUserSerializer
 class UsersListCreate(APIView):
     """View to list all users in the system and creation of new ones."""
 
-    serializer_class = MyCustomUserSerializer  # without it, browsable API display basic form Content Type and Content
+    serializer_class = MyCustomUserSerializer  # without it, browsable API displays basic form Content Type and Content
 
     def get_object(self):
-        users = MyCustomUser.objects.exclude(is_admin=True)
+        users = MyCustomUser.objects.exclude(is_admin=True).select_related("customerprofile")
         return users
 
     def get(self, request, format=None):
 
         users = self.get_object()
-        serializer = MyCustomUserSerializer(users, many=True)
+        serializer = MyCustomUserSerializer(users, many=True, context={"request": request})
         return Response(serializer.data)
 
     def post(self, request, format=None):
 
         data = request.data
-        serializer = MyCustomUserSerializer(data=data)
+        serializer = MyCustomUserSerializer(data=data, context={"request": request})
 
         if serializer.is_valid(raise_exception=True):
             serializer.save()
@@ -46,15 +46,15 @@ class AdminUsersList(APIView):
     serializer_class = MyCustomUserSerializer
 
     def get(self, request, format=None):
-        admin_users = MyCustomUser.admins.all()
-        serializer = MyCustomUserSerializer(admin_users, many=True)
+        admin_users = MyCustomUser.admins.all().select_related("customerprofile")
+        serializer = MyCustomUserSerializer(admin_users, many=True, context={"request": request})
 
         return Response(serializer.data)
 
     def post(self, request, format=None):
 
         data = request.data
-        serializer = MyCustomUserSerializer(data=data)
+        serializer = MyCustomUserSerializer(data=data, context={"request": request})
 
         if serializer.is_valid(raise_exception=True):
             # passing argument so that it pops up in the "validated data" in serializer's create method
@@ -86,7 +86,7 @@ class UserDetail(APIView):
         except ObjectDoesNotExist:
             return Response("wrong id, user non existent")
 
-        serializer = MyCustomUserSerializer(user)
+        serializer = MyCustomUserSerializer(user, context={"request": request})
 
         return Response(serializer.data)
 
@@ -104,12 +104,13 @@ class UserDetail(APIView):
 
     def patch(self, request, slug, format=None):
         """
-        allows partial update of a user.
-        obj mandatory, otherwise all fields are required..
+        - allows partial update of a user.
+        - obj mandatory to identify the user and compare changed values to existing ones
+        for valuation purposes
         """
         obj = MyCustomUser.objects.get(random_identifier=slug.split("-")[-1])
         data = request.data
-        serializer = MyCustomUserSerializer(obj, data=data, partial=True, context=obj.id)
+        serializer = MyCustomUserSerializer(obj, data=data, partial=True, context={"obj": obj.id, "request": request})
 
         if serializer.is_valid():
             serializer.save()
