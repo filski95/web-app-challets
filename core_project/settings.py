@@ -44,13 +44,16 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     # my_apps
     "accounts.apps.AccountsConfig",
+    "bookings.apps.BookingsConfig",
     # 3rd party
     "rest_framework",
+    "debug_toolbar",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "debug_toolbar.middleware.DebugToolbarMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -123,12 +126,13 @@ TIME_ZONE = "UTC"
 USE_I18N = True
 
 USE_TZ = True
-
+INTERNAL_IPS = ["127.0.0.1", "0.0.0.0:8000"]
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.0/howto/static-files/
 
 STATIC_URL = "static/"
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.0/ref/settings/#default-auto-field
@@ -138,3 +142,19 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AUTH_USER_MODEL = "accounts.MyCustomUser"
 LOGIN_REDIRECT_URL = "login"
 LOGOUT_REDIRECT_URL = "login"
+
+
+# https://knasmueller.net/fix-djangos-debug-toolbar-not-showing-inside-docker
+# needed for django toolbar to work in docker environment
+import socket
+
+hostname, _, ips = socket.gethostbyname_ex(socket.gethostname())
+INTERNAL_IPS += [".".join(ip.split(".")[:-1] + ["1"]) for ip in ips]
+
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.BasicAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
+    ]
+}

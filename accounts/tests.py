@@ -63,6 +63,9 @@ class MyCustomUserTest(TestCase):
             )
 
 
+from rest_framework.test import APIClient
+
+
 class MyCustomUserTestAPI(APITestCase):
     @classmethod
     def setUpTestData(cls) -> None:
@@ -73,7 +76,7 @@ class MyCustomUserTestAPI(APITestCase):
             name="testname",
             surname="testsurname",
             date_of_birth=date(1995, 10, 10),
-            password="adminadmin1",
+            password="passwordtest123",
         )
 
         cls.admin_user = MyCustomUser.objects.create_superuser(
@@ -81,7 +84,7 @@ class MyCustomUserTestAPI(APITestCase):
             name="filip",
             surname="admins",
             date_of_birth=date(1995, 10, 10),
-            password="adminadmin1",
+            password="passwordtest123",
         )
 
     def assertContainsAny(self, response, texts, status_code=200, msg_prefix="", html=False):
@@ -107,15 +110,26 @@ class MyCustomUserTestAPI(APITestCase):
         # otherwise at least 1 item was not found
         self.assertTrue(total_count == loops)
 
-    def test_user_detail_get(self):
+    def test_user_detail_get_not_admin(self):
+        self.client.force_authenticate(self.testuser)
         response = self.client.get(reverse("accounts:user_detail", kwargs={"slug": self.testuser.slug}))
-
         user_outputed = MyCustomUser.objects.filter(name=self.testuser.name).values_list(
-            "email", "surname", "name", "email", "date_of_birth"
+            "email", "surname", "name", "email", "date_of_birth", "slug"
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertContainsAny(response, *user_outputed)
+        self.assertContainsAll(response, *user_outputed)
+        self.assertNotContains(response, "customerprofile")  # admin only
+
+    def test_user_detail_get_admin(self):
+        self.client.force_authenticate(self.admin_user)
+
+        response = self.client.get(reverse("accounts:user_detail", kwargs={"slug": self.testuser.slug}))
+        user_outputed = MyCustomUser.objects.filter(name=self.testuser.name).values_list(
+            "email", "surname", "name", "email", "date_of_birth", "slug"
+        )
+
+        self.assertContains(response, "customerprofile")  # admin only
 
     def test_user_detail_delete(self):
         response = self.client.delete(reverse("accounts:user_detail", kwargs={"slug": self.testuser.slug}))
@@ -129,10 +143,7 @@ class MyCustomUserTestAPI(APITestCase):
         url = reverse("accounts:user_detail", kwargs={"slug": self.testuser.slug})
 
         data = {"email": "change_test@gmail.com"}
-        response = self.client.patch(
-            url,
-            data=data,
-        )
+        response = self.client.patch(url, data=data)
         # reload to see the update - without it the old one shows up
         self.testuser.refresh_from_db()
         self.assertEqual(self.testuser.email, data.get("email"))
@@ -152,16 +163,25 @@ class MyCustomUserTestAPI(APITestCase):
         self.assertNotEqual(self.testuser.email, data_temp.get("email"))
 
     def test_user_detail_patch_name_surname(self):
-        """name and surname cannot be the same"""
+        """
+        - name and surname cannot be the same
+        - slug must be updated after a successful change
+        """
 
         data = {"surname": "testname"}
 
         response = self.client.patch(reverse("accounts:user_detail", kwargs={"slug": self.testuser.slug}), data=data)
 
         self.testuser.refresh_from_db()
-
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertNotEqual(self.testuser.surname, data.get("surname"))  # no change
+
+        data = {"surname": "testsurname"}
+        r_success = self.client.patch(reverse("accounts:user_detail", kwargs={"slug": self.testuser.slug}), data=data)
+
+        self.testuser.refresh_from_db()
+        name, surname, identifier = self.testuser.slug.split("-")
+        self.assertEqual(surname, data.get("surname"))  # slug updates after name/surname change
 
     def test_user_detail_change_password(self):
         initial_password = self.testuser.password
@@ -192,6 +212,7 @@ class MyCustomUserTestAPI(APITestCase):
         self.assertEqual(response_data_one_password.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_users_list_post_get_delete(self):
+        self.client.force_authenticate(self.testuser)
         data = {
             "name": "filip",
             "surname": "test",
@@ -203,12 +224,15 @@ class MyCustomUserTestAPI(APITestCase):
         }
         # testing post / user creation
         response = self.client.post(reverse("accounts:users_list"), data, format="json")
+
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
         # testing get / list of users
         get_response = self.client.get(reverse("accounts:users_list"))
         self.assertEqual(get_response.status_code, status.HTTP_200_OK)
         self.assertContainsAny(get_response, data)
+        self.assertContains(get_response, data.get("email"))
+        self.assertNotContains(get_response, "customerprofile")  # admin only
 
         self.assertNotContains(get_response, self.admin_user.email)
 
@@ -216,6 +240,12 @@ class MyCustomUserTestAPI(APITestCase):
         delete_response = self.client.delete("/accounts/users/")
         self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(get_user_model().objects.exclude(is_admin=True))  # empty, users deleted -> False
+
+    def test_users_list_admin_customerprofile_field(self):
+        self.client.login(email=self.admin_user.email, password="passwordtest123")
+        get_response = self.client.get(reverse("accounts:users_list"))
+
+        self.assertContains(get_response, "customerprofile")
 
     def test_admin_users_list_get_post_delete(self):
         data = {
