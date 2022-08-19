@@ -63,9 +63,6 @@ class MyCustomUserTest(TestCase):
             )
 
 
-from rest_framework.test import APIClient
-
-
 class MyCustomUserTestAPI(APITestCase):
     @classmethod
     def setUpTestData(cls) -> None:
@@ -83,6 +80,14 @@ class MyCustomUserTestAPI(APITestCase):
             email="admin@gmail.com",
             name="filip",
             surname="admins",
+            date_of_birth=date(1995, 10, 10),
+            password="passwordtest123",
+        )
+
+        cls.dummy_user = MyCustomUser.objects.create_user(
+            email="dummy@gmail.com",
+            name="dummy_name",
+            surname="dummy_surname",
             date_of_birth=date(1995, 10, 10),
             password="passwordtest123",
         )
@@ -110,6 +115,24 @@ class MyCustomUserTestAPI(APITestCase):
         # otherwise at least 1 item was not found
         self.assertTrue(total_count == loops)
 
+    def test_main_api_view_only_for_authenticated_users(self):
+
+        url = "/apis/"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.client.force_authenticate(self.testuser)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_admin_users_list_view_admin_only_anonymous(self):
+
+        url = reverse("accounts:admin_list")
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data.get("detail"), "Authentication credentials were not provided.")
+
     def test_user_detail_get_not_admin(self):
         self.client.force_authenticate(self.testuser)
         response = self.client.get(reverse("accounts:user_detail", kwargs={"slug": self.testuser.slug}))
@@ -132,6 +155,7 @@ class MyCustomUserTestAPI(APITestCase):
         self.assertContains(response, "customerprofile")  # admin only
 
     def test_user_detail_delete(self):
+        self.client.force_authenticate(self.testuser)
         response = self.client.delete(reverse("accounts:user_detail", kwargs={"slug": self.testuser.slug}))
         u = self.testuser
 
@@ -140,6 +164,7 @@ class MyCustomUserTestAPI(APITestCase):
 
     def test_user_detail_patch_email(self):
         """email change - ok unless same email already taken"""
+        self.client.force_authenticate(self.testuser)
         url = reverse("accounts:user_detail", kwargs={"slug": self.testuser.slug})
 
         data = {"email": "change_test@gmail.com"}
@@ -159,7 +184,7 @@ class MyCustomUserTestAPI(APITestCase):
         view = UsersListCreate.as_view()
         response = view(request, slug=self.testuser.slug)
 
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertNotEqual(self.testuser.email, data_temp.get("email"))
 
     def test_user_detail_patch_name_surname(self):
@@ -169,7 +194,7 @@ class MyCustomUserTestAPI(APITestCase):
         """
 
         data = {"surname": "testname"}
-
+        self.client.force_authenticate(self.testuser)
         response = self.client.patch(reverse("accounts:user_detail", kwargs={"slug": self.testuser.slug}), data=data)
 
         self.testuser.refresh_from_db()
@@ -184,6 +209,7 @@ class MyCustomUserTestAPI(APITestCase):
         self.assertEqual(surname, data.get("surname"))  # slug updates after name/surname change
 
     def test_user_detail_change_password(self):
+        self.client.force_authenticate(self.testuser)
         initial_password = self.testuser.password
         data = {"password": "adminadmin123", "password2": "adminadmin123"}  # nb + letter + 8 char
         data_wrong = {"password": "adminadmin", "password2": "adminadmin"}  # lack of nb
@@ -211,8 +237,20 @@ class MyCustomUserTestAPI(APITestCase):
         self.assertEqual(error_msg, "Passwords must match, have at least 8 characters at least 1 number and letter")
         self.assertEqual(response_data_one_password.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_users_list_post_get_delete(self):
+    def test_deatil_wont_work_with_somboedys_user_account(self):
+        """
+        detail view wont let users change other user's details
+        """
         self.client.force_authenticate(self.testuser)
+        data = {"name": "changed_name"}
+        url = reverse("accounts:user_detail", kwargs={"slug": self.dummy_user.slug})
+
+        response = self.client.patch(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_users_list_post_get_delete(self):
+        self.client.force_authenticate(self.admin_user)
         data = {
             "name": "filip",
             "surname": "test",
@@ -232,7 +270,7 @@ class MyCustomUserTestAPI(APITestCase):
         self.assertEqual(get_response.status_code, status.HTTP_200_OK)
         self.assertContainsAny(get_response, data)
         self.assertContains(get_response, data.get("email"))
-        self.assertNotContains(get_response, "customerprofile")  # admin only
+        self.assertContains(get_response, "customerprofile")  # admin only
 
         self.assertNotContains(get_response, self.admin_user.email)
 
@@ -248,6 +286,7 @@ class MyCustomUserTestAPI(APITestCase):
         self.assertContains(get_response, "customerprofile")
 
     def test_admin_users_list_get_post_delete(self):
+        self.client.force_authenticate(self.admin_user)
         data = {
             "email": "new_admin@gmail.com",
             "name": "random_admin",

@@ -3,6 +3,8 @@ from datetime import date
 from accounts.models import MyCustomUser
 from django.test import TestCase
 from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
 
 
 class CustomerProfileTest(TestCase):
@@ -14,6 +16,13 @@ class CustomerProfileTest(TestCase):
             surname="testsurname",
             date_of_birth=date(1995, 10, 10),
             password="adminadmin1",
+        )
+        cls.admin_user = MyCustomUser.objects.create_superuser(
+            email="admin@gmail.com",
+            name="filip",
+            surname="admins",
+            date_of_birth=date(1995, 10, 10),
+            password="passwordtest123",
         )
 
     def test_automatic_creation_customer_profile(self):
@@ -37,3 +46,54 @@ class CustomerProfileTest(TestCase):
 
         self.assertEqual(self.testuser.name, self.testuser.customerprofile.first_name)
         self.assertEqual(self.testuser.surname, self.testuser.customerprofile.surname)
+
+
+class CustomerProfileAPITest(APITestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.testuser = MyCustomUser.objects.create_user(
+            email="test@gmail.com",
+            name="testname",
+            surname="testsurname",
+            date_of_birth=date(1995, 10, 10),
+            password="adminadmin1",
+        )
+        cls.admin_user = MyCustomUser.objects.create_superuser(
+            email="admin@gmail.com",
+            name="filip",
+            surname="admins",
+            date_of_birth=date(1995, 10, 10),
+            password="passwordtest123",
+        )
+
+    def test_customers_view_admin_only(self):
+
+        url = reverse("bookings:customers")
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.client.force_authenticate(self.testuser)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.client.logout()
+
+        self.client.force_authenticate(self.admin_user)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_customers_list_view_admin_only(self):
+
+        url = reverse("bookings:single_customer", kwargs={"pk": self.testuser.customerprofile.id})
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.client.force_authenticate(self.testuser)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.client.logout()
+
+        self.client.force_authenticate(self.admin_user)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
