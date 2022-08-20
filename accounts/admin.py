@@ -20,7 +20,7 @@ class UserAdmin(BaseUserAdmin):
             {"fields": ("email", "password", "slug", "name", "surname", "random_identifier")},
         ),
         ("Personal info", {"fields": ("date_of_birth", "city")}),
-        ("Permissions", {"fields": ("is_admin",)}),
+        ("Permissions", {"fields": ("is_admin", "groups", "is_active", "is_superuser", "user_permissions")}),
     )
 
     add_fieldsets = (
