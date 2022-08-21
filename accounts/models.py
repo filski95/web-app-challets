@@ -5,6 +5,8 @@ from django.db import models
 from django.template.defaultfilters import slugify
 from django.urls import reverse
 
+from . import decorators
+
 
 def create_random_identifier():
     random_identifier = random.randint(1, 32766)
@@ -17,6 +19,7 @@ class AdminUserManager(models.Manager):
 
 
 class MyUserManager(BaseUserManager):
+    @decorators.communicate_user_creation(for_user=True, log=True)
     def create_user(self, email, name, surname, password, **extra_fields):
         """
         Creates and saves a User with the given email, date of

@@ -1,3 +1,4 @@
+from accounts import decorators
 from accounts.models import MyCustomUser
 from django.db.models.signals import post_save
 from django.dispatch import receiver
