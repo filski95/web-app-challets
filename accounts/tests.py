@@ -6,7 +6,7 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.reverse import reverse
-from rest_framework.test import APIRequestFactory, APITestCase
+from rest_framework.test import APIClient, APIRequestFactory, APITestCase
 
 from .models import MyCustomUser
 from .serializers import MyCustomUserSerializer
@@ -341,3 +341,13 @@ class MyCustomUserTestAPI(APITestCase):
         # should be 3 => equal to nb of users
 
         self.assertEqual(total_tokens, len(MyCustomUser.objects.all()))
+
+    def test_with_login_with_tokens(self):
+
+        token = Token.objects.get(user=self.testuser)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION="Token " + token.key)
+
+        response = client.get("/api/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
