@@ -10,5 +10,6 @@ def api_root(request, format=None):
             "users": reverse("accounts:users_list", request=request, format=format),
             "admin_users": reverse("accounts:admin_list", request=request, format=format),
             "customers": reverse("bookings:customers", request=request, format=format),
+            "registration": "/api/registration/",
         }
     )
