@@ -10,10 +10,12 @@ from .models import CustomerProfile
 @receiver(post_save, sender=MyCustomUser)
 def create_profile(sender, instance, created, **kwargs):
     """profile is created right after user"""
-    if created and instance.is_admin is False:
-        CustomerProfile.objects.create(user=instance, first_name=instance.name, surname=instance.surname)
     if created:
+        # all users have tokens
         Token.objects.create(user=instance)
+        if instance.is_admin is False:
+            # only non admin users have customer profile
+            CustomerProfile.objects.create(user=instance, first_name=instance.name, surname=instance.surname)
 
 
 @receiver(post_save, sender=MyCustomUser)
