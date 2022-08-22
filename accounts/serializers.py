@@ -1,11 +1,39 @@
 import re
 from datetime import date
 
+from django.contrib.auth import authenticate
 from django.contrib.auth.models import AnonymousUser
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
 from .models import MyCustomUser, create_random_identifier
+
+
+class RetrieveTokenSerializer(serializers.Serializer):
+    # needed to remove validation to allow post request.
+    # hence MyCustomSerializer not used in this case
+    # additionally, default serializer for ObtainToken view requires username..
+    email = serializers.EmailField(max_length=40)
+    password = serializers.CharField(
+        write_only=True, required=True, style={"input_type": "password"}, trim_whitespace=False
+    )
+
+    def validate(self, attrs):
+        email = attrs.get("email")
+        password = attrs.get("password")
+
+        if email and password:
+            user = authenticate(email=email, password=password)
+
+            if not user:
+                msg = "Unable to log in with provided credentials."
+                raise serializers.ValidationError(msg, code="authorization")
+        else:
+            msg = 'Must include "username" and "password".'
+            raise serializers.ValidationError(msg, code="authorization")
+
+        attrs["user"] = user
+        return attrs
 
 
 class MyCustomUserSerializer(serializers.Serializer):
