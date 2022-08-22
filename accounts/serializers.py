@@ -37,7 +37,7 @@ class MyCustomUserSerializer(serializers.Serializer):
     # to allow dj-rest-registration -> otherwise error with arguments
     def save(self, *args, **kwargs):
 
-        return super().save(*args, **kwargs)
+        return super().save(**kwargs)
 
     def get_fields(self, *args, **kwargs):
         """
