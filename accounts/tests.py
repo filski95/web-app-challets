@@ -4,6 +4,7 @@ from datetime import date
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework import status
+from rest_framework.authtoken.models import Token
 from rest_framework.reverse import reverse
 from rest_framework.test import APIRequestFactory, APITestCase
 
@@ -119,7 +120,7 @@ class MyCustomUserTestAPI(APITestCase):
 
         url = "/api/"
         response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
         self.client.force_authenticate(self.testuser)
         response = self.client.get(url)
@@ -130,7 +131,7 @@ class MyCustomUserTestAPI(APITestCase):
         url = reverse("accounts:admin_list")
         response = self.client.get(url)
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertEqual(response.data.get("detail"), "Authentication credentials were not provided.")
 
     def test_user_detail_get_not_admin(self):
@@ -184,7 +185,7 @@ class MyCustomUserTestAPI(APITestCase):
         view = UsersListCreate.as_view()
         response = view(request, slug=self.testuser.slug)
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertNotEqual(self.testuser.email, data_temp.get("email"))
 
     def test_user_detail_patch_name_surname(self):
@@ -312,3 +313,31 @@ class MyCustomUserTestAPI(APITestCase):
         self.assertEqual(len(admins_after_deletion), 1)  # "filip" not touched
         self.assertEqual(delete_response.status_code, status.HTTP_200_OK)
         self.assertContains(delete_response, "Admin Users were successfully deleted!")
+
+    def test_token_retrieval(self):
+        """
+        test if user will retrieve the token upon submission of correct credentials
+        """
+        response = self.client.post(
+            "/accounts/api-token-auth/", data={"email": "test@gmail.com", "password": "passwordtest123"}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertContains(response, "token")
+
+    def test_token_retrieval_wrong_password(self):
+        """
+        test if user will retrieve the token upon submission of correct credentials
+        """
+        response = self.client.post(
+            "/accounts/api-token-auth/", data={"email": "admin@gmail.com", "password": "wrongpassword123"}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_creation_of_tokens_after_post_save_signal(self):
+
+        total_tokens = len(Token.objects.all())
+        # should be 3 => equal to nb of users
+
+        self.assertEqual(total_tokens, len(MyCustomUser.objects.all()))

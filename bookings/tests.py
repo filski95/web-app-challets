@@ -71,7 +71,7 @@ class CustomerProfileAPITest(APITestCase):
         url = reverse("bookings:customers")
 
         response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
         self.client.force_authenticate(self.testuser)
         response = self.client.get(url)
@@ -87,7 +87,7 @@ class CustomerProfileAPITest(APITestCase):
         url = reverse("bookings:single_customer", kwargs={"pk": self.testuser.customerprofile.id})
 
         response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
         self.client.force_authenticate(self.testuser)
         response = self.client.get(url)

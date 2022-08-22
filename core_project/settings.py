@@ -48,12 +48,13 @@ INSTALLED_APPS = [
     "bookings.apps.BookingsConfig",
     # 3rd party
     "rest_framework",
+    "rest_framework.authtoken",
     "debug_toolbar",
     "allauth",  # django-allauth
     "allauth.account",  # django-allauth
     "allauth.socialaccount",  # django-allauth
     "dj_rest_auth.registration",  # dj-rest-auth / django-allauth
-    "rest_framework.authtoken",  # dj-rest-auth / django-allauth
+    # dj-rest-auth / django-allauth
 ]
 
 REST_AUTH_REGISTER_SERIALIZERS = {"REGISTER_SERIALIZER": "accounts.serializers.MyCustomUserSerializer"}
@@ -170,13 +171,11 @@ INTERNAL_IPS += [".".join(ip.split(".")[:-1] + ["1"]) for ip in ips]
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.BasicAuthentication",
+        "rest_framework.authentication.TokenAuthentication",
         "rest_framework.authentication.SessionAuthentication",
-    ]
-}
-
-REST_FRAMEWORK = {
+        "rest_framework.authentication.BasicAuthentication",
+    ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
-    ]
+    ],
 }

@@ -1,13 +1,33 @@
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
 from rest_framework import status
+from rest_framework.authtoken.models import Token
+from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import MyCustomUser
 from .permissions import IsUserAccountOwnerOrAdmin
-from .serializers import MyCustomUserSerializer
+from .serializers import MyCustomUserSerializer, RetrieveTokenSerializer
+
+
+class CustomAuthToken(ObtainAuthToken):
+    """
+    customized view allowing clients to retrieve tokens upon submission of valid credentials
+    - customization lies primarily in the RetrieveTokenSerializer ->login through email enabled
+    """
+
+    serializer_class = RetrieveTokenSerializer
+
+    def post(self, request, *args, **kwargs):
+
+        serializer = RetrieveTokenSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data["email"]
+        user = MyCustomUser.objects.get(email=email)
+        token, created = Token.objects.get_or_create(user=user)
+        return Response({"token": token.key, "user_id": user.id, "email": user.email})
 
 
 class UsersListCreate(APIView):
