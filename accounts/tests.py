@@ -117,7 +117,7 @@ class MyCustomUserTestAPI(APITestCase):
 
     def test_main_api_view_only_for_authenticated_users(self):
 
-        url = "/apis/"
+        url = "/api/"
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 

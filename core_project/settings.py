@@ -34,7 +34,7 @@ ALLOWED_HOSTS: list[str] = ["0.0.0.0"]
 
 
 # Application definition
-
+# registration : https://dj-rest-auth.readthedocs.io/en/latest/installation.html
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -42,13 +42,27 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.sites",  # django-allauth
     # my_apps
     "accounts.apps.AccountsConfig",
     "bookings.apps.BookingsConfig",
     # 3rd party
     "rest_framework",
     "debug_toolbar",
+    "allauth",  # django-allauth
+    "allauth.account",  # django-allauth
+    "allauth.socialaccount",  # django-allauth
+    "dj_rest_auth.registration",  # dj-rest-auth / django-allauth
+    "rest_framework.authtoken",  # dj-rest-auth / django-allauth
 ]
+
+REST_AUTH_REGISTER_SERIALIZERS = {"REGISTER_SERIALIZER": "accounts.serializers.MyCustomUserSerializer"}
+ACCOUNT_AUTHENTICATION_METHOD = "email"
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_UNIQUE_EMAIL = True
+ACCOUNT_USER_MODEL_USERNAME_FIELD = None
+ACCOUNT_USERNAME_REQUIRED = False
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -74,6 +88,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "django.template.context_processors.request",  # console emails after registration
             ],
         },
     },
@@ -115,6 +130,7 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+SITE_ID = 3
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.0/topics/i18n/

@@ -23,7 +23,8 @@ urlpatterns = [
     path("accounts/", include("accounts.urls")),
     path("accounts/", include("django.contrib.auth.urls")),
     path("bookings/", include("bookings.urls")),
+    path("api-auth", include("rest_framework.urls")),  # login
+    path("api/registration", include("dj_rest_auth.registration.urls")),  # registration
+    path("api/", main_api_view.api_root),  # main view api / starting point
     path("__debug__/", include("debug_toolbar.urls")),
-    path("api-auth", include("rest_framework.urls")),
-    path("apis/", main_api_view.api_root),
 ]

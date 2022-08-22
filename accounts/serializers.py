@@ -34,6 +34,11 @@ class MyCustomUserSerializer(serializers.Serializer):
             )
         ]
 
+    # to allow dj-rest-registration -> otherwise error with arguments
+    def save(self, *args, **kwargs):
+
+        return super().save(*args, **kwargs)
+
     def get_fields(self, *args, **kwargs):
         """
         - customerprofile field to be visible only for users with admin status.
@@ -54,6 +59,7 @@ class MyCustomUserSerializer(serializers.Serializer):
             # used only to trigger create_superuser
             validated_data.pop("admin")
             return MyCustomUser.objects.create_superuser(**validated_data)
+
         return MyCustomUser.objects.create_user(**validated_data)
 
     def update(self, instance, validated_data):
