@@ -15,6 +15,7 @@ def create_profile(sender, instance, created, **kwargs):
         Token.objects.create(user=instance)
         if instance.is_admin is False:
             # only non admin users have customer profile
+            print(instance.is_admin)
             CustomerProfile.objects.create(user=instance, first_name=instance.name, surname=instance.surname)
 
 

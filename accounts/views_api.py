@@ -113,6 +113,7 @@ class UserDetail(APIView):
 
         except ObjectDoesNotExist:
             return Response("wrong id, user non existent")
+            # deploys method in the custom permission class: IsUserAccountOwnerOrAdmin
         self.check_object_permissions(self.request, user)
         return user
 
