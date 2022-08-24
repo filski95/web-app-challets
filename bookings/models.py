@@ -6,6 +6,10 @@ from django.contrib.auth import get_user_model
 from django.db import models
 
 
+def get_sentinel_user():
+    return MyCustomUser.objects.get(email="sentinel_user@gmail.com")  # sentinel user created manually with such email
+
+
 class CustomerProfile(models.Model):
     NEW_CUSTOMER = "N"
     REGULAR = "R"
@@ -22,6 +26,10 @@ class CustomerProfile(models.Model):
     def __str__(self) -> str:
         return f"Customer's profile of {self.user} who joined on {self.joined}"
 
+    @property
+    def full_name(self):
+        return f"{self.frist_name} {self.surname}"
+
 
 class Reservation(models.Model):
     reservation_owner = models.ForeignKey(CustomerProfile, on_delete=models.CASCADE)
@@ -30,7 +38,7 @@ class Reservation(models.Model):
 class CommunicationBaseModel(models.Model):
     title = models.CharField(max_length=50)
     main_text = models.TextField(max_length=2000, verbose_name="message content")
-    author = models.ForeignKey(settings.AUTH_USER_MODEL, default="Anonymous", on_delete=models.SET_DEFAULT)
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, default=get_sentinel_user, on_delete=models.SET_DEFAULT)
     image = models.ImageField(blank=True)
     provided_on = models.DateField(auto_now_add=True)
     edited_on = models.DateField(auto_now=True)
@@ -38,9 +46,11 @@ class CommunicationBaseModel(models.Model):
     class Meta:
         abstract = True
 
+    def __str__(self) -> str:
+        return f"A {self.__class__.__name__}; Author: {self.author}; Title: {self.title}"
+
 
 class Suggestion(CommunicationBaseModel):
-    # asd = models.CharField(max_length=50)
     pass
 
 
@@ -49,4 +59,5 @@ class Opinion(CommunicationBaseModel):
     # to check validity of the person leaving the opinion
     # -> want to avoid necessity to have account/register
     # as some people may make a reservation through other source (phone)
-    pass
+    name = models.CharField(max_length=20, null=True, blank=True)
+    surname = models.CharField(max_length=20, null=True, blank=True)

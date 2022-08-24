@@ -76,6 +76,7 @@ class MyCustomUserSerializer(serializers.Serializer):
         request = self.context.get("request")
 
         if isinstance(request.user, AnonymousUser) or request.user.is_admin is False:
+
             fields.pop("customerprofile")
         return fields
 

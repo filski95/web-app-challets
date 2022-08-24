@@ -13,22 +13,23 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
 from . import main_api_view
 
-try:
-    urlpatterns = [
-        path("admin/", admin.site.urls),
-        path("accounts/", include("accounts.urls")),
-        path("accounts/", include("django.contrib.auth.urls")),
-        path("bookings/", include("bookings.urls")),
-        path("api-auth", include("rest_framework.urls")),  # login
-        path("api/registration", include("dj_rest_auth.registration.urls")),  # registration
-        path("api/", main_api_view.api_root),  # main view api / starting point
-        path("__debug__/", include("debug_toolbar.urls")),
-    ]
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    path("accounts/", include("accounts.urls")),
+    path("accounts/", include("django.contrib.auth.urls")),
+    path("bookings/", include("bookings.urls")),
+    path("api-auth", include("rest_framework.urls")),  # login
+    path("api/registration/", include("dj_rest_auth.registration.urls")),  # registration
+    path("api/", main_api_view.api_root),  # main view api / starting point
+    path("__debug__/", include("debug_toolbar.urls")),
+]
 
-except:
-    pass
+# to allow images to be viewable
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
