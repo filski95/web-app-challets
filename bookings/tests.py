@@ -186,7 +186,7 @@ class CustomerProfileAPITest(APITestCase):
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertContains(response, self.suggestion1.title)
+        self.assertContainsAll(response, [self.suggestion1.title, self.testuser.full_name])
         self.assertNotContains(response, self.suggestion2.title)
 
         test_photo = self.generate_photo_file()
@@ -237,6 +237,7 @@ class CustomerProfileAPITest(APITestCase):
         url = reverse("bookings:opinions")
 
         response = self.client.get(url)
+        print(response.data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertContainsAll(
             response,
@@ -245,6 +246,7 @@ class CustomerProfileAPITest(APITestCase):
                 self.opinion.main_text,
                 self.anonymous_opinion.title,
                 self.anonymous_opinion.main_text,
+                self.sentinel_user.full_name,  # anonymous user implementation
             ],
         )
 
@@ -292,7 +294,7 @@ class CustomerProfileAPITest(APITestCase):
         # all users can see opinions/ even not authenticated ones
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertContains(response, self.opinion.main_text)
+        self.assertContainsAll(response, [self.opinion.main_text, "author"])
 
         # admins not allowed to change opinions
         self.client.force_authenticate(self.admin_user)

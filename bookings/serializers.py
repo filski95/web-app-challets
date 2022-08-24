@@ -26,7 +26,8 @@ class SuggestionSerializer(serializers.ModelSerializer):
 
 class OpinionSerializer(serializers.ModelSerializer):
     url = serializers.HyperlinkedIdentityField(read_only=True, view_name="bookings:opinion_detail")
+    author = serializers.SlugRelatedField(read_only=True, slug_field="full_name")  # property used
 
     class Meta:
         model = Opinion
-        fields = ("title", "main_text", "image", "name", "surname", "url")
+        fields = ("title", "main_text", "image", "name", "surname", "author", "url")
