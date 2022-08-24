@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from bookings.models import CustomerProfile
+from bookings.models import CustomerProfile, Opinion, Reservation, Suggestion
 
 
 class CustomerInline(admin.StackedInline):
@@ -26,4 +26,12 @@ class CustomerProfileAdmin(admin.ModelAdmin):
     ]
 
 
+# @admin.register(Opinion)
+# class OpinionAdmin(admin.ModelAdmin):
+#     list_display = ["title"]
+
+
 admin.site.register(CustomerProfile, CustomerProfileAdmin)
+admin.site.register(Reservation)
+admin.site.register(Opinion)
+admin.site.register(Suggestion)
