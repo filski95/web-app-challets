@@ -21,3 +21,14 @@ class IsAuthorOtherwiseViewOnly(permissions.BasePermission):
 
         # otherwise only author for edition purposes
         return request.user == obj.author
+
+
+class IsOwnerOrAdmin(permissions.BasePermission):
+    def has_object_permission(self, request, view, obj):
+
+        # allow admin (owner) to view content
+        if request.user.is_superuser == True:
+            return True
+
+        # otherwise only author for edition purposes
+        return request.user == obj.reservation_owner

@@ -1,15 +1,24 @@
 from accounts.models import MyCustomUser
 from django.contrib.auth.models import AnonymousUser
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from django.db.models import Q
-from rest_framework import generics, serializers, status
+from rest_framework import generics, mixins, status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny, IsAdminUser
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
-from .models import CustomerProfile, Opinion, Suggestion
-from .permissions import IsAuthorOrAdmin, IsAuthorOtherwiseViewOnly
-from .serializers import CustomerProfileSerializer, OpinionSerializer, SuggestionSerializer
+from .models import ChalletHouse, CustomerProfile, Opinion, Reservation, Suggestion
+from .permissions import IsAuthorOrAdmin, IsAuthorOtherwiseViewOnly, IsOwnerOrAdmin
+from .serializers import (
+    BasicReservationSerializer,
+    ChalletHouseSerializer,
+    CustomerProfileSerializer,
+    DetailViewReservationSerializer,
+    OpinionSerializer,
+    ReservationSerializer,
+    SuggestionSerializer,
+)
 
 
 @api_view(["GET"])
@@ -133,4 +142,72 @@ class OpinionUserDetailView(generics.RetrieveUpdateAPIView):
     permission_classes = (IsAuthorOtherwiseViewOnly,)
     serializer_class = OpinionSerializer
 
-    queryset = Opinion.objects.all()
+    def get_queryset(self):
+        queryset = figure_the_queryset_out(self.request, Opinion, limit_list_view=False)
+        return queryset
+
+
+class ChalletHouseListView(generics.ListAPIView):
+    """
+    limited overall number of houses - no creation possible.
+    """
+
+    permission_classes = (AllowAny,)
+    serializer_class = ChalletHouseSerializer
+
+    def get_queryset(self):
+        queryset = ChalletHouse.objects.prefetch_related("house_reservations__customer_profile").prefetch_related(
+            "house_reservations__reservation_owner"
+        )
+
+        return queryset
+
+
+class ChalletHouseDetailView(generics.RetrieveAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = ChalletHouseSerializer
+
+    def get_queryset(self):
+        queryset = ChalletHouse.objects.prefetch_related("house_reservations__customer_profile").all()
+        return queryset
+
+
+class ReservationsListView(generics.ListAPIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = BasicReservationSerializer
+
+    def get_queryset(self):
+        if self.request.user.is_admin is True:
+            queryset = Reservation.objects.all().order_by("house", "start_date")
+        else:
+            queryset = Reservation.objects.filter(
+                Q(reservation_owner__id=self.request.user.id) & ~Q(start_date=None)
+            ).order_by("house", "start_date")
+        return queryset
+
+
+class ReservationRetrieveUpdate(generics.RetrieveUpdateAPIView):
+    permission_classes = (IsOwnerOrAdmin,)
+    serializer_class = DetailViewReservationSerializer
+    http_method_names = ["get", "put"]
+
+    def get_queryset(self):
+        queryset = Reservation.objects.all()
+        return queryset
+
+    def perform_update(self, serializer):
+        obj = self.get_object()
+
+        serializer.save(obj=obj)
+
+
+class ReservationCreateView(generics.CreateAPIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = ReservationSerializer
+
+    def get_queryset(self):
+        queryset = Reservation.objects.all()
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(reservation_owner=self.request.user, customer_profile=self.request.user.customerprofile)

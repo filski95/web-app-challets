@@ -1,8 +1,13 @@
+import datetime
+from importlib.abc import ResourceReader
+
 from accounts import decorators
 from accounts.models import MyCustomUser
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from rest_framework.authtoken.models import Token
+
+from bookings.models import Reservation
 
 from .models import CustomerProfile
 
@@ -15,7 +20,6 @@ def create_profile(sender, instance, created, **kwargs):
         Token.objects.create(user=instance)
         if instance.is_staff is False:
             # only non admin users have customer profile
-
             CustomerProfile.objects.create(user=instance, first_name=instance.name, surname=instance.surname)
 
 
@@ -35,3 +39,13 @@ def update_profiles(sender, instance, created, **kwargs):
             instance.customerprofile.surname = user_surname
 
         instance.customerprofile.save()
+
+
+@receiver(post_save, sender=Reservation)
+def update_reservation_number(sender, instance, created, **kwargs):
+    """
+    creating a reservation number out of todays date and id of the created reservation
+    """
+    if created:
+        instance.reservation_number = "".join(str(datetime.date.today()).split("-")) + str(instance.id)
+        instance.save()

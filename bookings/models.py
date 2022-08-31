@@ -1,13 +1,10 @@
-from tabnanny import verbose
-
 from accounts.models import MyCustomUser
 from django.conf import settings
-from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator
 from django.db import models
 
-
-def get_sentinel_user():
-    return MyCustomUser.objects.get(email="sentinel_user@gmail.com")  # sentinel user created manually with such email
+from . import auxiliary
 
 
 class CustomerProfile(models.Model):
@@ -24,21 +21,19 @@ class CustomerProfile(models.Model):
     surname = models.CharField(max_length=20, editable=False, null=True)  # from user model
 
     def __str__(self) -> str:
-        return f"Customer's profile of {self.user} who joined on {self.joined}"
+        return f"Profile of: {str(self.user).title()} [ID: {self.user.id}]; joined on {self.joined}"
 
     @property
     def full_name(self):
         return f"{self.frist_name} {self.surname}"
 
 
-class Reservation(models.Model):
-    reservation_owner = models.ForeignKey(CustomerProfile, on_delete=models.CASCADE)
-
-
 class CommunicationBaseModel(models.Model):
     title = models.CharField(max_length=50)
     main_text = models.TextField(max_length=2000, verbose_name="message content")
-    author = models.ForeignKey(settings.AUTH_USER_MODEL, default=get_sentinel_user, on_delete=models.SET_DEFAULT)
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL, default=auxiliary.get_sentinel_user, on_delete=models.SET_DEFAULT
+    )
     image = models.ImageField(blank=True)
     provided_on = models.DateField(auto_now_add=True)
     edited_on = models.DateField(auto_now=True)
@@ -61,3 +56,63 @@ class Opinion(CommunicationBaseModel):
     # as some people may make a reservation through other source (phone)
     name = models.CharField(max_length=20, null=True, blank=True)
     surname = models.CharField(max_length=20, null=True, blank=True)
+
+
+class ChalletHouse(models.Model):
+    price_night = models.SmallIntegerField(verbose_name="price per night")
+    house_number = models.PositiveSmallIntegerField(
+        validators=[MaxValueValidator(limit_value=3)], primary_key=True, null=False, unique=True
+    )
+
+    def __str__(self) -> str:
+        return f"Domek numer {self.house_number}"
+
+
+class Reservation(models.Model):
+    CONFIRMED = 1
+    NOT_CONFIRMED = 0
+    CANCELLED = 9
+
+    STATUS_CHOICES = [
+        (CONFIRMED, "Reservation confirmed"),
+        (NOT_CONFIRMED, "Reservation not confirmed"),
+        (CANCELLED, "Reservation has been cancelled"),
+    ]
+
+    customer_profile = models.ForeignKey(CustomerProfile, on_delete=models.CASCADE)
+    reservation_owner = models.ForeignKey(MyCustomUser, on_delete=models.CASCADE, related_name="reservations")
+    house = models.ForeignKey(
+        ChalletHouse,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="house_reservations",
+    )
+    status = models.SmallIntegerField(choices=STATUS_CHOICES, default=NOT_CONFIRMED, blank=True)
+
+    start_date = models.DateField(null=True, blank=False, help_text="Beginning of your stay")
+    end_date = models.DateField(null=True, blank=False, help_text="Last day of your stay/departure")
+    nights = models.PositiveSmallIntegerField(blank=True)
+    total_price = models.SmallIntegerField(blank=True)
+
+    # signal to create date + reservation Id
+    reservation_number = models.CharField(max_length=20, blank=True, null=True, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    objects = auxiliary.ChalletSpotQuerySet()
+
+    def save(self, *args, **kwargs):
+        # todo check if changed?
+        cancellation = kwargs.pop("cancellation", None)
+
+        # cancellation means that start and end date of a stay are transformed into Nones
+        # calculation of nights would crash -> if stmt to avoid it
+        if not cancellation:
+            self.nights = (self.end_date - self.start_date).days  # time delta days
+        self.total_price = self.nights * self.house.price_night
+        super().save(*args, **kwargs)
+
+    def clean(self):
+        # validation for admin panel
+        if self.start_date >= self.end_date:
+            raise ValidationError("End date must be later than start date")
