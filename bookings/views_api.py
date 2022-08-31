@@ -178,9 +178,11 @@ class ReservationsListView(generics.ListAPIView):
 
     def get_queryset(self):
         if self.request.user.is_admin is True:
-            queryset = Reservation.objects.all()
+            queryset = Reservation.objects.all().order_by("house", "start_date")
         else:
-            queryset = Reservation.objects.filter(Q(reservation_owner__id=self.request.user.id) & ~Q(start_date=None))
+            queryset = Reservation.objects.filter(
+                Q(reservation_owner__id=self.request.user.id) & ~Q(start_date=None)
+            ).order_by("house", "start_date")
         return queryset
 
 

@@ -410,8 +410,8 @@ class CustomerChalletHousesAPITest(APITestCase):
 
         url = reverse("bookings:challet_houses")
         response = self.client.get(url)
-        # response.data = [ordered_dict ... (already_reserved_nights: [dates])]
-        dates_str = [str(d) for d in response.data[0].get("already_reserved_nights")]
+        # response.data = [ordered_dict ... (house_nb : already_reserved_nights: [dates])]
+        dates_str = [str(d) for d in response.data[0].get("already_reserved_nights").get(self.house_nb_1.house_number)]
         reservation = self.first_reservation
         content_list = [str(self.testuser.customerprofile), reservation.start_date, reservation.end_date]
 
@@ -437,8 +437,10 @@ class CustomerChalletHousesAPITest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         response = self.client.get(url)
 
-        # response data = {..already_reserved_nights: dates.... 'house_reservations':Ordered_Dict ->}
-        dates_str = [str(d) for d in response.data.get("already_reserved_nights")]
+        # response data = {..already_reserved_nights: house_nb: dates.... 'house_reservations':Ordered_Dict ->}
+        dates_str = [str(d) for d in response.data.get("already_reserved_nights").get(self.house_nb_1.house_number)]
+
+        # print(response.data.get("already_reserved_nights").get(self.house_nb_1.house_number))
         reservation = self.first_reservation
         content_list = [str(self.testuser.customerprofile), reservation.start_date, reservation.end_date]
 

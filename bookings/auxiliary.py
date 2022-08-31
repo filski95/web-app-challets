@@ -15,7 +15,7 @@ class ChalletSpotQuerySet(models.Manager):
         # ignore all canceleed reservations
         queryset = self.filter(Q(house=house_number) & ~Q(start_date=None))
         taken_spots = self._date_ranges(queryset)
-        return taken_spots
+        return {house_number: taken_spots}
 
     def _date_ranges(self, queryset):
         all_taken_days = []

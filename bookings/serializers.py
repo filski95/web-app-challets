@@ -102,15 +102,25 @@ class ReservationSerializer(DynamicFieldsModelSerializer):
         if selected_house is None:
             return True
 
-        new_reservation_days = [str(start + timedelta(days=day)) for day in range((end - start).days + 1)]
+        new_reservation_days = [start + timedelta(days=day) for day in range((end - start).days + 1)]
+        # {house_nb: list_of_dates}
         taken_spots = selected_house.house_reservations.house_spots(selected_house.house_number)
 
         # try except block in case it is the first registration and taken_spots is empty.
         try:
-            if end < taken_spots[0] or start > taken_spots[-1]:
+            if (
+                end < taken_spots.get(selected_house.house_number)[0]
+                or start > taken_spots.get(selected_house.house_number)[-1]
+            ):
                 return True
+
             else:
-                raise exceptions.DatesNotAvailable(days=new_reservation_days)  # days att might be ditched if too exp.
+                if new_reservation_days[0] not in taken_spots.get(
+                    selected_house.house_number
+                ) and new_reservation_days[-1] not in taken_spots.get(selected_house.house_number):
+                    return True
+
+            raise exceptions.DatesNotAvailable(days=new_reservation_days)  # days att might be ditched if too exp.
         except IndexError:
             pass
 
