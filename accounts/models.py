@@ -61,6 +61,7 @@ class MyUserManager(BaseUserManager):
             surname=surname,
             **extra_fields,
         )
+
         user.is_admin = True
         user.save()
         return user
@@ -95,7 +96,7 @@ class MyCustomUser(AbstractBaseUser, PermissionsMixin):
     REQUIRED_FIELDS = ["name", "surname"]  # admin createsuperuser
 
     def __str__(self) -> str:
-        return f"User: {self.name} {self.surname}: {self.email}"
+        return f"{self.name} {self.surname}"
 
     @property
     def full_name(self):

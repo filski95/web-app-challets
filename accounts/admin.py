@@ -13,6 +13,7 @@ class UserAdmin(BaseUserAdmin):
     add_form = CustomUserCreationForm
     prepopulated_fields = {"slug": ("name", "surname", "random_identifier")}
     list_display = ("email", "date_of_birth", "is_admin", "id", "random_identifier")
+    read_only_fields = ("slug",)
     list_filter = ("is_admin",)
     fieldsets = (
         (

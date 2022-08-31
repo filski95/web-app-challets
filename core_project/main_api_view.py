@@ -14,6 +14,9 @@ def api_root(request, format=None):
             "customers": reverse("bookings:customers", request=request, format=format),
             "suggestions": reverse("bookings:suggestions", request=request, format=format),
             "opinions": reverse("bookings:opinions", request=request, format=format),
+            "challet_houses": reverse("bookings:challet_houses", request=request, format=format),
+            "reservations": reverse("bookings:reservations", request=request, format=format),
+            "create_reservation": reverse("bookings:reservation_create", request=request, format=format),
             "registration": "/api/registration/",
         }
     )
