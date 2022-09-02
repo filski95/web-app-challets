@@ -1,6 +1,8 @@
+import datetime
 import io
 import os
 from datetime import date
+from unittest import mock
 
 from accounts.models import MyCustomUser
 from django.test import TestCase
@@ -11,6 +13,7 @@ from rest_framework.parsers import JSONParser
 from rest_framework.test import APITestCase
 
 from bookings.models import ChalletHouse, Opinion, Reservation, Suggestion
+from bookings.utils import my_date
 
 
 class CustomerProfileTest(TestCase):
@@ -610,3 +613,22 @@ class CustomerChalletHousesAPITest(APITestCase):
                 f"http://0.0.0.0:8000/bookings/reservations/{self.first_reservation.id}/",
             ],
         )
+
+    @mock.patch("bookings.utils.my_date.today")
+    def test_validate_future_date_past_reservation_list_records(self, d):
+        """
+        changing the return of my_date.today() to a date past reservations
+        admin should see all of them
+        """
+        my_date.today.return_value = date(2022, 12, 25)
+        url = reverse("bookings:past_reservations")
+        self.client.force_authenticate(self.admin_user)
+        response = self.client.get(url)
+
+        self.assertEqual(len(response.data), Reservation.objects.count())
+        self.client.logout()
+
+        # user sees only his past reservations
+        self.client.force_authenticate(self.testuser)
+        response = self.client.get(url)
+        self.assertEqual(len(response.data), len(Reservation.objects.filter(reservation_owner=self.testuser)))

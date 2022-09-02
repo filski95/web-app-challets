@@ -1,12 +1,17 @@
+from datetime import timedelta
+from time import time
+
 from accounts.models import MyCustomUser
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from django.db.models import Q
-from rest_framework import generics, mixins, status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework import generics, status, viewsets
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
+
+from bookings.utils import my_date
 
 from .models import ChalletHouse, CustomerProfile, Opinion, Reservation, Suggestion
 from .permissions import IsAuthorOrAdmin, IsAuthorOtherwiseViewOnly, IsOwnerOrAdmin
@@ -172,18 +177,44 @@ class ChalletHouseDetailView(generics.RetrieveAPIView):
         return queryset
 
 
-class ReservationsListView(generics.ListAPIView):
+class ReservationsListViewSet(viewsets.ModelViewSet):
+    """
+    viewset limited to listing reservations:
+    1. bookings:reservations lists all current + future reservations for admins; and the same but for specific user for non admins
+    2. bookings:past_reservations lists all past reservations for admins; all past reservations of a user for non admin users
+    """
+
     permission_classes = (IsAuthenticated,)
     serializer_class = BasicReservationSerializer
 
     def get_queryset(self):
+
         if self.request.user.is_admin is True:
-            queryset = Reservation.objects.all().order_by("house", "start_date")
+            queryset = Reservation.objects.filter(Q(end_date__gte=my_date.today())).order_by("house", "start_date")
         else:
             queryset = Reservation.objects.filter(
-                Q(reservation_owner__id=self.request.user.id) & ~Q(start_date=None)
+                Q(reservation_owner__id=self.request.user.id) & ~Q(start_date=None) & Q(end_date__gte=my_date.today())
             ).order_by("house", "start_date")
         return queryset
+
+    @action(detail=False)
+    def past_reservations(self, request, *args, **kwargs):
+        past_reservations = Reservation.objects.all().select_related("customer_profile")
+
+        if request.user.is_admin is True:
+
+            past_reservations = [r for r in past_reservations if r.end_date < my_date.today()]
+            serializer = self.get_serializer(past_reservations, many=True)
+
+        else:
+            past_reservations = [
+                r
+                for r in past_reservations
+                if r.end_date < my_date.today() and r.reservation_owner.id == request.user.id
+            ]
+            serializer = self.get_serializer(past_reservations, many=True)
+
+        return Response(serializer.data)
 
 
 class ReservationRetrieveUpdate(generics.RetrieveUpdateAPIView):

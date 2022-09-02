@@ -5,6 +5,7 @@ from . import views_api
 
 app_name = "bookings"
 
+
 urlpatterns = [
     path("", main_api_view.api_root),
     path("customers/", views_api.customer_profiles, name="customers"),
@@ -15,7 +16,12 @@ urlpatterns = [
     path("opinions/<int:pk>/", views_api.OpinionUserDetailView.as_view(), name="opinion_detail"),
     path("challet_houses/", views_api.ChalletHouseListView.as_view(), name="challet_houses"),
     path("challet_houses/<int:pk>/", views_api.ChalletHouseDetailView.as_view(), name="challet_house"),
-    path("reservations/", views_api.ReservationsListView.as_view(), name="reservations"),
+    path("reservations/", views_api.ReservationsListViewSet.as_view({"get": "list"}), name="reservations"),
+    path(
+        "reservations/past_reservations/",
+        views_api.ReservationsListViewSet.as_view({"get": "past_reservations"}),
+        name="past_reservations",
+    ),
     path("reservations/<int:pk>/", views_api.ReservationRetrieveUpdate.as_view(), name="reservation_detail"),
     path("reservations/create/", views_api.ReservationCreateView.as_view(), name="reservation_create"),
 ]
