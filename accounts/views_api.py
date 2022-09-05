@@ -1,5 +1,6 @@
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
+from django_filters import rest_framework as filters
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
@@ -7,6 +8,7 @@ from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from . import filters as custom_filters
 from .models import MyCustomUser
 from .permissions import IsUserAccountOwnerOrAdmin
 from .serializers import MyCustomUserSerializer, RetrieveTokenSerializer
@@ -41,8 +43,11 @@ class UsersListCreate(APIView):
         return users
 
     def get(self, request, format=None):
-
+        """allow to filter precise user based on conditions specified in the custom filter or entire list apart from admin users"""
         users = self.get_object()
+        f = custom_filters.UserFilter(request.query_params, users)
+        if f.is_valid():
+            users = f.qs
         serializer = MyCustomUserSerializer(users, many=True, context={"request": request})
         return Response(serializer.data)
 

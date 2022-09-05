@@ -1,16 +1,18 @@
 from datetime import timedelta
-from time import time
 
 from accounts.models import MyCustomUser
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
-from django.db.models import Q
+from django.db.models import Count, Q, Sum
+from django_filters import rest_framework as filters
+from rest_framework import filters as rest_filters
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
+from bookings.filters import HouseFilter
 from bookings.utils import my_date
 
 from .models import ChalletHouse, CustomerProfile, Opinion, Reservation, Suggestion
@@ -155,16 +157,23 @@ class OpinionUserDetailView(generics.RetrieveUpdateAPIView):
 class ChalletHouseListView(generics.ListAPIView):
     """
     limited overall number of houses - no creation possible.
+    -> search by reservation_number enabled [res:house]
+    -> custom filterset [filters.py]
     """
 
     permission_classes = (AllowAny,)
     serializer_class = ChalletHouseSerializer
+    filter_backends = [filters.DjangoFilterBackend, rest_filters.OrderingFilter, rest_filters.SearchFilter]
+    filterset_class = HouseFilter
+    ordering_fields = ["house_number", "sum_nights", "num_reservations"]  # see annotate [get_queryset]
+    search_fields = ["house_reservations__reservation_number"]
 
     def get_queryset(self):
-        queryset = ChalletHouse.objects.prefetch_related("house_reservations__customer_profile").prefetch_related(
-            "house_reservations__reservation_owner"
-        )
+        queryset = ChalletHouse.objects.prefetch_related(
+            "house_reservations__customer_profile", "house_reservations__reservation_owner"
+        ).annotate(num_reservations=Count("house_reservations"), sum_nights=Sum("house_reservations__nights"))
 
+        queryset = self.filter_queryset(queryset)
         return queryset
 
 
@@ -173,6 +182,7 @@ class ChalletHouseDetailView(generics.RetrieveAPIView):
     serializer_class = ChalletHouseSerializer
 
     def get_queryset(self):
+
         queryset = ChalletHouse.objects.prefetch_related("house_reservations__customer_profile").all()
         return queryset
 
@@ -186,6 +196,7 @@ class ReservationsListViewSet(viewsets.ModelViewSet):
 
     permission_classes = (IsAuthenticated,)
     serializer_class = BasicReservationSerializer
+    filter_backends = (filters.DjangoFilterBackend,)
 
     def get_queryset(self):
 
@@ -200,6 +211,10 @@ class ReservationsListViewSet(viewsets.ModelViewSet):
     @action(detail=False)
     def past_reservations(self, request, *args, **kwargs):
         past_reservations = Reservation.objects.all().select_related("customer_profile")
+
+        # enabling django-filters
+        f = self.filter_queryset(past_reservations)
+        past_reservations = f
 
         if request.user.is_admin is True:
 
@@ -217,10 +232,15 @@ class ReservationsListViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+from rest_framework import filters
+
+
 class ReservationRetrieveUpdate(generics.RetrieveUpdateAPIView):
     permission_classes = (IsOwnerOrAdmin,)
     serializer_class = DetailViewReservationSerializer
     http_method_names = ["get", "put"]
+    filter_backends = [filters.SearchFilter]
+    search_fields = ["reservation_number"]
 
     def get_queryset(self):
         queryset = Reservation.objects.all()
