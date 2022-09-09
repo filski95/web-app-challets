@@ -23,7 +23,7 @@ class SuggestionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Suggestion
-        fields = ("title", "main_text", "image", "url", "author")
+        fields = ("title", "main_text", "image", "url", "author", "provided_on", "edited_on")
 
 
 class OpinionSerializer(serializers.ModelSerializer):
@@ -32,7 +32,7 @@ class OpinionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Opinion
-        fields = ("title", "main_text", "image", "name", "surname", "author", "url")
+        fields = ("title", "main_text", "image", "name", "surname", "author", "url", "provided_on", "edited_on")
 
 
 class DynamicFieldsModelSerializer(serializers.ModelSerializer):
@@ -49,7 +49,6 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
         all fields added to this list of arguments are removed from the final fields list.
 
         """
-
         # Don't pass the 'not_allowed_fields arg  to the superclass
         not_allowed_fields = kwargs.pop("not_allowed_fields", None)
         # Instantiate the superclass normally
@@ -110,12 +109,13 @@ class ReservationSerializer(DynamicFieldsModelSerializer):
         try:
             if (
                 end < taken_spots.get(selected_house.house_number)[0]
-                or start > taken_spots.get(selected_house.house_number)[-1]
+                or start >= taken_spots.get(selected_house.house_number)[-1]
             ):
                 return True
 
             else:
-                if new_reservation_days[0] not in taken_spots.get(
+                #! first day may overlap -> end date = leave so we can have someone leaving and comming in on the same day
+                if new_reservation_days[1] not in taken_spots.get(
                     selected_house.house_number
                 ) and new_reservation_days[-1] not in taken_spots.get(selected_house.house_number):
                     return True
@@ -166,6 +166,23 @@ class BasicReservationSerializer(ReservationSerializer):
             "reservation_url",
         ]
 
+    def get_fields(self, *args, **kwargs):
+        # TODO 2 options - either disable reservation objects for all users but admins or allow them to see only theirs
+        # TODO second option more expensive
+
+        fields = super().get_fields(*args, **kwargs)
+        from_challet_list = self.context.get("remove_house")
+        user = self.context.get("request").user
+
+        # dont show customer_profiel field to no admins
+        if not user.is_admin:
+            fields.pop("customer_profile")
+
+        # house irrelevant in the challet list -> linked to one anyway
+        if from_challet_list:
+            fields.pop("house")
+        return fields
+
 
 class DetailViewReservationSerializer(ReservationSerializer):
     """
@@ -188,7 +205,6 @@ class DetailViewReservationSerializer(ReservationSerializer):
 
     def update(self, instance, validated_data):
         new_status = validated_data.get("status")
-        # obj = validated_data.get("obj")
 
         if new_status == 9:
             instance.start_date = None
@@ -213,18 +229,21 @@ class DetailViewReservationSerializer(ReservationSerializer):
         return value
 
     def get_fields(self, *args, **kwargs):
-        """
-        - customerprofile field to be visible only for users with admin status.
-        """
+
         fields = super().get_fields(*args, **kwargs)
         fields.pop("id")  # dont want to have id displayed anywhere
+
+        user = self.context.get("request").user
+        if not user.is_admin:
+            fields.pop("customer_profile")
 
         return fields
 
 
 class ChalletHouseSerializer(serializers.ModelSerializer):
     url = serializers.HyperlinkedIdentityField(read_only=True, view_name="bookings:challet_house")
-    house_reservations = BasicReservationSerializer(many=True, not_allowed_fields=["id", "house"])
+    # house_reservations = BasicReservationSerializer(many=True, not_allowed_fields=["id", "house"])
+    house_reservations = serializers.SerializerMethodField()
     already_reserved_nights = serializers.SerializerMethodField()
 
     class Meta:
@@ -236,4 +255,24 @@ class ChalletHouseSerializer(serializers.ModelSerializer):
         house = ChalletHouse.objects.get(house_number=obj.house_number)
         taken_spots = house.house_reservations.house_spots(house.house_number)
 
-        return taken_spots
+        return list(taken_spots.values())[0]
+
+    def get_house_reservations(self, obj):
+        """
+        house reservations will display reservations to their owners only..
+        Admins will see all reservations [replacing nested serializer with this method to enable this "feature"]
+        """
+        user = self.context.get("request").user
+        serializer_context = {"remove_house": True, "request": self.context.get("request")}
+
+        if not user.is_authenticated:
+            reservations = []
+            serializer = BasicReservationSerializer(reservations, many=True, context=serializer_context)
+        elif user.is_admin:
+            reservations = Reservation.objects.filter(house=obj)
+            serializer = BasicReservationSerializer(reservations, many=True, context=serializer_context)
+        else:
+            reservations = Reservation.objects.filter(reservation_owner=user, house=obj)
+            serializer = BasicReservationSerializer(reservations, many=True, context=serializer_context)
+
+        return serializer.data

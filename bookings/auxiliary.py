@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import date, timedelta
 
 from accounts.models import MyCustomUser
 from django.db import models
@@ -13,18 +13,23 @@ def get_sentinel_user():
 class ChalletSpotQuerySet(models.Manager):
     def house_spots(self, house_number):
         # ignore all canceleed reservations
-        queryset = self.filter(Q(house=house_number) & ~Q(start_date=None))
+        queryset = self.filter(Q(house=house_number) & ~Q(start_date=None)).order_by("start_date")
         taken_spots = self._date_ranges(queryset)
         return {house_number: taken_spots}
 
     def _date_ranges(self, queryset):
         all_taken_days = []
         for reservation in queryset:
+
             start = reservation.start_date
             end = reservation.end_date
             difference = end - start
 
-            days = [start + timedelta(days=day) for day in range(difference.days + 1)]
+            days = [
+                start + timedelta(days=day)
+                for day in range(difference.days)
+                if (start + timedelta(days=day) >= date.today())
+            ]
             all_taken_days.extend(days)
 
         return all_taken_days

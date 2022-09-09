@@ -1,16 +1,18 @@
 from datetime import timedelta
-from time import time
 
 from accounts.models import MyCustomUser
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
-from django.db.models import Q
+from django.db.models import Count, Q, Sum
+from django_filters import rest_framework as filters
+from rest_framework import filters as rest_filters
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
+from bookings.filters import HouseFilter, OpinionFilter, ReservationFilter, SuggestionFilter
 from bookings.utils import my_date
 
 from .models import ChalletHouse, CustomerProfile, Opinion, Reservation, Suggestion
@@ -81,6 +83,11 @@ class SuggestionUserListCreateView(generics.ListCreateAPIView):
     # random people, passers by allowed to send suggestion
     permission_classes = (AllowAny,)
     serializer_class = SuggestionSerializer
+    filter_backends = (rest_filters.SearchFilter, filters.DjangoFilterBackend, rest_filters.OrderingFilter)
+    search_fields = ["title", "author"]
+    filterset_class = SuggestionFilter
+    ordering_fields = ["edited_on"]
+    ordering = ["edited_on"]
 
     def get_queryset(self):
         queryset = figure_the_queryset_out(self.request, Suggestion, limit_list_view=True)
@@ -90,7 +97,6 @@ class SuggestionUserListCreateView(generics.ListCreateAPIView):
         if type(self.request.user) == AnonymousUser:
             serializer.save()
         else:
-
             serializer.save(author=self.request.user)
 
 
@@ -104,6 +110,11 @@ class SuggestionUserDetailView(generics.RetrieveUpdateAPIView):
 class OpinionCreateListView(generics.ListCreateAPIView):
     permission_classes = (AllowAny,)
     serializer_class = OpinionSerializer
+    filter_backends = (filters.DjangoFilterBackend, rest_filters.OrderingFilter)
+    filterset_class = OpinionFilter
+
+    ordering_fields = ["edited_on"]
+    ordering = ["edited_on"]
 
     def get_queryset(self):
 
@@ -148,6 +159,7 @@ class OpinionUserDetailView(generics.RetrieveUpdateAPIView):
     serializer_class = OpinionSerializer
 
     def get_queryset(self):
+
         queryset = figure_the_queryset_out(self.request, Opinion, limit_list_view=False)
         return queryset
 
@@ -155,15 +167,21 @@ class OpinionUserDetailView(generics.RetrieveUpdateAPIView):
 class ChalletHouseListView(generics.ListAPIView):
     """
     limited overall number of houses - no creation possible.
+    -> search by reservation_number enabled [res:house]
+    -> custom filterset [filters.py]
     """
 
     permission_classes = (AllowAny,)
     serializer_class = ChalletHouseSerializer
+    filter_backends = [filters.DjangoFilterBackend, rest_filters.OrderingFilter, rest_filters.SearchFilter]
+    filterset_class = HouseFilter
+    ordering_fields = ["house_number", "sum_nights", "num_reservations"]  # see annotate [get_queryset]
+    search_fields = ["house_reservations__reservation_number"]
 
     def get_queryset(self):
-        queryset = ChalletHouse.objects.prefetch_related("house_reservations__customer_profile").prefetch_related(
-            "house_reservations__reservation_owner"
-        )
+        queryset = ChalletHouse.objects.prefetch_related(
+            "house_reservations__customer_profile", "house_reservations__reservation_owner"
+        ).annotate(num_reservations=Count("house_reservations"), sum_nights=Sum("house_reservations__nights"))
 
         return queryset
 
@@ -173,6 +191,7 @@ class ChalletHouseDetailView(generics.RetrieveAPIView):
     serializer_class = ChalletHouseSerializer
 
     def get_queryset(self):
+
         queryset = ChalletHouse.objects.prefetch_related("house_reservations__customer_profile").all()
         return queryset
 
@@ -186,6 +205,10 @@ class ReservationsListViewSet(viewsets.ModelViewSet):
 
     permission_classes = (IsAuthenticated,)
     serializer_class = BasicReservationSerializer
+    filter_backends = (filters.DjangoFilterBackend, rest_filters.OrderingFilter)
+    filterset_class = ReservationFilter
+    ordering_fields = ("reservation_number", "start_date")
+    ordering = "start_date"
 
     def get_queryset(self):
 
@@ -195,6 +218,8 @@ class ReservationsListViewSet(viewsets.ModelViewSet):
             queryset = Reservation.objects.filter(
                 Q(reservation_owner__id=self.request.user.id) & ~Q(start_date=None) & Q(end_date__gte=my_date.today())
             ).order_by("house", "start_date")
+
+        queryset = self.filter_queryset(queryset)
         return queryset
 
     @action(detail=False)
@@ -206,6 +231,7 @@ class ReservationsListViewSet(viewsets.ModelViewSet):
             past_reservations = [r for r in past_reservations if r.end_date < my_date.today()]
             serializer = self.get_serializer(past_reservations, many=True)
 
+        # if not admin then limit output to user's reservations only.
         else:
             past_reservations = [
                 r
