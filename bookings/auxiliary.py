@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import date, timedelta
 
 from accounts.models import MyCustomUser
 from django.db import models
@@ -25,7 +25,11 @@ class ChalletSpotQuerySet(models.Manager):
             end = reservation.end_date
             difference = end - start
 
-            days = [start + timedelta(days=day) for day in range(difference.days)]
+            days = [
+                start + timedelta(days=day)
+                for day in range(difference.days)
+                if (start + timedelta(days=day) >= date.today())
+            ]
             all_taken_days.extend(days)
 
         return all_taken_days

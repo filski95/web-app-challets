@@ -46,6 +46,12 @@ class CommunicationBaseModel(models.Model):
 
 
 class Suggestion(CommunicationBaseModel):
+    """
+    - virtually anyone can send a suggestion
+    - list views will be visible to admin only, but users will be able to see their suggestions.
+    - Annonymous user will not have amendable by authors
+    """
+
     pass
 
 

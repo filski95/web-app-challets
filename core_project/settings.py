@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount",  # django-allauth
     "dj_rest_auth.registration",  # dj-rest-auth / django-allauth
     "django_filters",
+    "crispy_forms",
 ]
 
 REST_AUTH_REGISTER_SERIALIZERS = {"REGISTER_SERIALIZER": "accounts.serializers.MyCustomUserSerializer"}

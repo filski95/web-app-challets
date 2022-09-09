@@ -12,7 +12,7 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
-from bookings.filters import HouseFilter
+from bookings.filters import HouseFilter, OpinionFilter, ReservationFilter, SuggestionFilter
 from bookings.utils import my_date
 
 from .models import ChalletHouse, CustomerProfile, Opinion, Reservation, Suggestion
@@ -83,6 +83,11 @@ class SuggestionUserListCreateView(generics.ListCreateAPIView):
     # random people, passers by allowed to send suggestion
     permission_classes = (AllowAny,)
     serializer_class = SuggestionSerializer
+    filter_backends = (rest_filters.SearchFilter, filters.DjangoFilterBackend, rest_filters.OrderingFilter)
+    search_fields = ["title", "author"]
+    filterset_class = SuggestionFilter
+    ordering_fields = ["edited_on"]
+    ordering = ["edited_on"]
 
     def get_queryset(self):
         queryset = figure_the_queryset_out(self.request, Suggestion, limit_list_view=True)
@@ -92,7 +97,6 @@ class SuggestionUserListCreateView(generics.ListCreateAPIView):
         if type(self.request.user) == AnonymousUser:
             serializer.save()
         else:
-
             serializer.save(author=self.request.user)
 
 
@@ -106,6 +110,11 @@ class SuggestionUserDetailView(generics.RetrieveUpdateAPIView):
 class OpinionCreateListView(generics.ListCreateAPIView):
     permission_classes = (AllowAny,)
     serializer_class = OpinionSerializer
+    filter_backends = (filters.DjangoFilterBackend, rest_filters.OrderingFilter)
+    filterset_class = OpinionFilter
+
+    ordering_fields = ["edited_on"]
+    ordering = ["edited_on"]
 
     def get_queryset(self):
 
@@ -150,6 +159,7 @@ class OpinionUserDetailView(generics.RetrieveUpdateAPIView):
     serializer_class = OpinionSerializer
 
     def get_queryset(self):
+
         queryset = figure_the_queryset_out(self.request, Opinion, limit_list_view=False)
         return queryset
 
@@ -173,7 +183,6 @@ class ChalletHouseListView(generics.ListAPIView):
             "house_reservations__customer_profile", "house_reservations__reservation_owner"
         ).annotate(num_reservations=Count("house_reservations"), sum_nights=Sum("house_reservations__nights"))
 
-        queryset = self.filter_queryset(queryset)
         return queryset
 
 
@@ -196,7 +205,10 @@ class ReservationsListViewSet(viewsets.ModelViewSet):
 
     permission_classes = (IsAuthenticated,)
     serializer_class = BasicReservationSerializer
-    filter_backends = (filters.DjangoFilterBackend,)
+    filter_backends = (filters.DjangoFilterBackend, rest_filters.OrderingFilter)
+    filterset_class = ReservationFilter
+    ordering_fields = ("reservation_number", "start_date")
+    ordering = "start_date"
 
     def get_queryset(self):
 
@@ -206,15 +218,13 @@ class ReservationsListViewSet(viewsets.ModelViewSet):
             queryset = Reservation.objects.filter(
                 Q(reservation_owner__id=self.request.user.id) & ~Q(start_date=None) & Q(end_date__gte=my_date.today())
             ).order_by("house", "start_date")
+
+        queryset = self.filter_queryset(queryset)
         return queryset
 
     @action(detail=False)
     def past_reservations(self, request, *args, **kwargs):
         past_reservations = Reservation.objects.all().select_related("customer_profile")
-
-        # enabling django-filters
-        f = self.filter_queryset(past_reservations)
-        past_reservations = f
 
         if request.user.is_admin is True:
 
@@ -232,15 +242,10 @@ class ReservationsListViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-from rest_framework import filters
-
-
 class ReservationRetrieveUpdate(generics.RetrieveUpdateAPIView):
     permission_classes = (IsOwnerOrAdmin,)
     serializer_class = DetailViewReservationSerializer
     http_method_names = ["get", "put"]
-    filter_backends = [filters.SearchFilter]
-    search_fields = ["reservation_number"]
 
     def get_queryset(self):
         queryset = Reservation.objects.all()

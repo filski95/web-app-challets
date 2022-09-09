@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from unittest import mock
 
 from accounts.models import MyCustomUser
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.test import TestCase
 from django.urls import reverse
 from PIL import Image
@@ -176,11 +176,10 @@ class CustomerProfileAPITest(APITestCase):
         """annonymous user can send suggestions -> sentinel user attached to the suggestion obj."""
 
         url = reverse("bookings:suggestions")
-        # should be empty list
-        response_get = self.client.get(url)
 
+        response_get = self.client.get(url)
         self.assertEqual(response_get.status_code, status.HTTP_200_OK)
-        self.assertContains(response_get, [])
+        self.assertContainsAll(response_get, [self.suggestion1.title, self.suggestion2.title])
 
         suggestion3 = {"title": "suggestion3", "main_text": "nice suggestion3"}
         response = self.client.post(url, data=suggestion3)
@@ -413,16 +412,20 @@ class CustomerChalletHousesAPITest(APITestCase):
         self.assertTrue(total_count == 0)
 
     def test_challet_house_list_view(self):
-        """list view -> allow any only get allowed. Test written assuming there are 2 reservations"""
+        """
+        list view -> allow any only get allowed. Test written assuming there are 2 reservations
+        fields with house_reservations yield results to their owners or admins only
+        """
 
         url = reverse("bookings:challet_houses")
         response = self.client.get(url)
 
         dates_str = [d for d in response.data[0].get("already_reserved_nights")]
         reservation = self.first_reservation
-        content_list = [str(self.testuser.customerprofile), reservation.start_date, reservation.end_date]
-
+        no_content_list = [str(self.testuser.customerprofile), str(reservation.end_date)]
+        content_list = [str(reservation.start_date)]
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotContainsAll(response, no_content_list)
         self.assertContainsAll(response, content_list)
         all_nights = self.return_all_nights() + 1  # last date is a "go home day" so the night can be booked
         self.assertEqual(len(dates_str), all_nights - 1)
@@ -446,9 +449,11 @@ class CustomerChalletHousesAPITest(APITestCase):
 
         dates_str = [d for d in response.data.get("already_reserved_nights")]
         reservation = self.first_reservation
-        content_list = [str(self.testuser.customerprofile), reservation.start_date, reservation.end_date]
+        no_content_list = [str(self.testuser.customerprofile), str(reservation.end_date)]
+        content_list = [str(reservation.start_date)]
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotContainsAll(response, no_content_list)
         self.assertContainsAll(response, content_list)
         all_nights = self.return_all_nights() + 1  # last date is a "go home day" so the night can be booked
         self.assertEqual(len(dates_str), all_nights - 1)
@@ -460,8 +465,8 @@ class CustomerChalletHousesAPITest(APITestCase):
         self.assertEqual(response_post.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
         response_put = self.client.put(url, data={"price_night": 350, "house_number": 1})
         self.assertEqual(response_put.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
-        # lists house reservations properly
-        self.assertEqual(len(response.data.get("house_reservations")), Reservation.objects.count())
+        # lists house reservations properly -> not logged in user
+        self.assertEqual(len(response.data.get("house_reservations")), 0)
 
     def test_reservation_create_view(self):
 
@@ -510,7 +515,6 @@ class CustomerChalletHousesAPITest(APITestCase):
         self.client.force_authenticate(self.testuser)
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertContains(response, str(self.testuser.customerprofile))
         self.assertNotContains(response, str(self.testuser2.customerprofile))
         self.client.logout()
         # admin sees all
@@ -721,7 +725,7 @@ class FiltersTestingAPI(APITestCase):
         results_8_or_more = f.calculate_nights(qs, "home_reservations_gte", (qs[1].sum_nights))
         self.assertEqual(len(results_8_or_more), 1)
 
-    def test_house_filter_start_date(self):
+    def test_house_filter_start_date_range(self):
 
         # make sure nothing with the starting day yesterday is listed
         data = {"start_date_range": "yesterday"}
@@ -736,3 +740,28 @@ class FiltersTestingAPI(APITestCase):
         data = {"start_date_range": "year"}
         results = HouseFilter(data, self.queryset)
         self.assertTrue(self.check_if_all_returned(results.qs, [self.house_nb_2, self.house_nb_1]))
+
+    def test_house_filter_start(self):
+
+        # shows only 1 record with a house 2 where reservation is created today.
+        data = {"house_reservations__start_date": my_date.today()}
+        results = HouseFilter(data, self.queryset)
+        self.assertEqual(len(results.qs), 1)
+        self.assertTrue(self.check_if_all_returned(results.qs, [self.house_nb_2]))
+
+        # no reservation with start date in the past
+        data = {"house_reservations__start_date": (my_date.today() - timedelta(1))}
+        results = HouseFilter(data, self.queryset)
+        self.assertEqual(len(results.qs), 0)
+
+        data = {"house_reservations__start_date__gte": my_date.today()}
+        results = HouseFilter(data, self.queryset)
+
+        self.assertEqual(len(results.qs), ChalletHouse.objects.filter(~Q(house_reservations=None)).count())
+        self.assertTrue(self.check_if_all_returned(results.qs, [self.house_nb_2, self.house_nb_1]))
+
+    def test_house_filter_number_of_reservations(self):
+        data = {"num_reservations": self.house_nb_1.house_reservations.all().count()}
+        results = HouseFilter(data, self.queryset)
+
+        self.assertTrue(self.check_if_all_returned(results.qs, [self.house_nb_1]))
