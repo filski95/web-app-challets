@@ -231,6 +231,7 @@ class ReservationsListViewSet(viewsets.ModelViewSet):
             past_reservations = [r for r in past_reservations if r.end_date < my_date.today()]
             serializer = self.get_serializer(past_reservations, many=True)
 
+        # if not admin then limit output to user's reservations only.
         else:
             past_reservations = [
                 r

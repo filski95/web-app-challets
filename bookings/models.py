@@ -42,7 +42,7 @@ class CommunicationBaseModel(models.Model):
         abstract = True
 
     def __str__(self) -> str:
-        return f"A {self.__class__.__name__}; Author: {self.author}; Title: {self.title}"
+        return f"A/an {self.__class__.__name__}; Author: {self.author}; Title: {self.title}; ID: {self.id}"
 
 
 class Suggestion(CommunicationBaseModel):

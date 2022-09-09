@@ -38,13 +38,13 @@ class UsersListCreate(APIView):
     permission_classes = [IsAdminUser]
     serializer_class = MyCustomUserSerializer  # without it, browsable API displays basic form Content Type and Content
 
-    def get_object(self):
+    def get_queryset(self):
         users = MyCustomUser.objects.exclude(is_admin=True).select_related("customerprofile")
         return users
 
     def get(self, request, format=None):
         """allow to filter precise user based on conditions specified in the custom filter or entire list apart from admin users"""
-        users = self.get_object()
+        users = self.get_queryset()
         f = custom_filters.UserFilter(request.query_params, users)
         if f.is_valid():
             users = f.qs
@@ -63,7 +63,7 @@ class UsersListCreate(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, format=None):
-        users = self.get_object()
+        users = self.get_queryset()
         users.delete()  # delete all normal users.
         return Response("Users were successfully deleted!", status=status.HTTP_204_NO_CONTENT)
 

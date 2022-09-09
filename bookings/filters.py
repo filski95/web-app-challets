@@ -71,7 +71,6 @@ class HouseFilter(filters.FilterSet):
     def calculate_nights(self, queryset, name, value):
         # name attribute comes from field_name in the atrtributes section
         # sum_nights -> annotate in the querset, calculating all nights for single house
-
         if name[-3:] == "gte":
             queryset = queryset.filter(sum_nights__gte=value)
         elif name[-3:] == "lte":
@@ -82,9 +81,11 @@ class HouseFilter(filters.FilterSet):
         return queryset
 
     # def filter_nights(self, queryset, name, value):
+
     # method based on the filter. Not implemented as the fields on the NightsTriField are not displayed as expected
     # it is simply not transparent enough and not worth the hustle. Stick to 3 fields and one method -> calculate_nights
     # code left for future reference.
+
     #     return queryset
 
 
@@ -103,10 +104,10 @@ class OpinionFilter(filters.FilterSet):
     class Meta:
         model = Opinion
         fields = {
-            "title": ["exact", "icontains"],
+            "title": ["icontains"],
             "author": ["exact"],
-            "name": ["exact"],
-            "surname": ["exact"],
+            "name": ["exact", "icontains"],
+            "surname": ["exact", "icontains"],
         }
 
 

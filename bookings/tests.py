@@ -15,9 +15,9 @@ from rest_framework.test import APITestCase
 
 from bookings.models import ChalletHouse, Opinion, Reservation, Suggestion
 from bookings.utils import my_date
-from bookings.views_api import ChalletHouseListView
+from bookings.views_api import ChalletHouseListView, ReservationsListViewSet
 
-from .filters import HouseFilter
+from .filters import HouseFilter, OpinionFilter, ReservationFilter
 
 
 class CustomerProfileTest(TestCase):
@@ -654,20 +654,28 @@ class FiltersTestingAPI(APITestCase):
             password="adminadmin1",
         )
 
+        cls.admin_user = MyCustomUser.objects.create_superuser(
+            email="admin@gmail.com",
+            name="filip",
+            surname="admins",
+            date_of_birth=date(1995, 10, 10),
+            password="passwordtest123",
+        )
+
         cls.reservation_1 = Reservation.objects.create(
             customer_profile=cls.testuser.customerprofile,
             reservation_owner=cls.testuser,
             house=cls.house_nb_1,
-            start_date=date(2022, 10, 10),
-            end_date=date(2022, 10, 15),
+            start_date=my_date.today() + timedelta(25),
+            end_date=my_date.today() + timedelta(28),
         )
 
         cls.reservation_2 = Reservation.objects.create(
             customer_profile=cls.testuser.customerprofile,
             reservation_owner=cls.testuser,
             house=cls.house_nb_2,
-            start_date=date(2022, 11, 10),
-            end_date=date(2022, 11, 14),
+            start_date=my_date.today() + timedelta(30),
+            end_date=my_date.today() + timedelta(35),
         )
         cls.reservation_3 = Reservation.objects.create(
             customer_profile=cls.testuser.customerprofile,
@@ -687,6 +695,31 @@ class FiltersTestingAPI(APITestCase):
         cls.queryset = ChalletHouse.objects.prefetch_related(
             "house_reservations__customer_profile", "house_reservations__reservation_owner"
         ).annotate(num_reservations=Count("house_reservations"), sum_nights=Sum("house_reservations__nights"))
+        cls.q_admin_reserv = Reservation.objects.filter(Q(end_date__gte=my_date.today())).order_by(
+            "house", "start_date"
+        )
+
+        cls.suggestion1 = Suggestion.objects.create(
+            title="test suggestion",
+            main_text="nice suggestion",
+            author=cls.testuser,
+        )
+        cls.suggestion2 = Suggestion.objects.create(
+            title="test suggestion2",
+            main_text="nice suggestion2",
+            author=cls.testuser,
+        )
+
+        cls.opinion = Opinion.objects.create(
+            title="test opinion",
+            main_text="nice suggestion",
+            author=cls.testuser,
+        )
+        cls.opinion2 = Opinion.objects.create(
+            title="different opinion",
+            main_text="nice anonymous suggestion",
+            author=cls.testuser,
+        )
 
     def check_if_all_returned(self, queryset, set_of_objects):
         for o in queryset:
@@ -706,8 +739,7 @@ class FiltersTestingAPI(APITestCase):
         self.assertEqual(len(results_5), 1)
         self.assertEqual(results_5.get(), self.house_nb_1)  # results => queryset
 
-        results_4 = f.calculate_nights(qs, "house_reservations", self.reservation_2.nights)  # 4
-
+        results_4 = f.calculate_nights(qs, "house_reservations", self.reservation_2.nights + 10)  # 4
         self.assertEqual(len(results_4), 0)
 
         results_8 = f.calculate_nights(qs, "house_reservations", (qs[1].sum_nights))
@@ -765,3 +797,60 @@ class FiltersTestingAPI(APITestCase):
         results = HouseFilter(data, self.queryset)
 
         self.assertTrue(self.check_if_all_returned(results.qs, [self.house_nb_1]))
+
+    def test_reservations_filter(self):
+        data = {"reservation_number": self.reservation_4.reservation_number}
+        results = ReservationFilter(data, self.q_admin_reserv)
+        self.assertEqual(len(results.qs), 1)
+        self.assertEqual(results.qs.get(), self.reservation_4)
+
+        data = {"house": self.house_nb_1.house_number}
+        results = ReservationFilter(data, self.q_admin_reserv)
+        self.assertEqual(len(results.qs), len(Reservation.objects.filter(house=self.house_nb_1)))
+
+        data = {"status": 0}
+        results = ReservationFilter(data, self.q_admin_reserv)
+        self.assertEqual(len(results.qs), len(Reservation.objects.filter(status=0)))
+
+        data = {"start_date__gte": self.reservation_2.start_date}
+        results = ReservationFilter(data, self.q_admin_reserv)
+        self.assertEqual(
+            len(results.qs), len(Reservation.objects.filter(start_date__gte=self.reservation_2.start_date))
+        )
+
+        data = {"start_date__lte": self.reservation_2.start_date}
+        results = ReservationFilter(data, self.q_admin_reserv)
+        self.assertEqual(
+            len(results.qs), len(Reservation.objects.filter(start_date__lte=self.reservation_2.start_date))
+        )
+
+    def test_reservations_ordering(self):
+        self.client.force_authenticate(self.admin_user)
+        url = reverse("bookings:reservations")
+        url = url + "?ordering=reservation_number"
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data[0].get("reservation_number"), self.reservation_1.reservation_number)
+
+        url = reverse("bookings:reservations")
+        url = url + "?ordering=-reservation_number"  # reverse case
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data[0].get("reservation_number"), self.reservation_4.reservation_number)
+        self.client.logout()
+
+    def test_opinion_filter(self):
+        data = {"title__icontains": self.opinion.title}
+        opinion_queryset = Opinion.objects.all()
+        results = OpinionFilter(data, opinion_queryset)
+        self.assertEqual(len(results.qs), len(Opinion.objects.filter(title__icontains=self.opinion.title)))
+
+        data = {"author": self.admin_user}
+        results = OpinionFilter(data, opinion_queryset)
+        self.assertEqual(len(results.qs), 0)  # 0 opinions created by Admin
+
+        data = {"author": self.testuser}
+        results = OpinionFilter(data, opinion_queryset)
+        self.assertEqual(len(results.qs), 2)  # all opinions
