@@ -98,7 +98,7 @@ class SuggestionUserListCreateView(generics.ListCreateAPIView):
     filterset_class = SuggestionFilter
     ordering_fields = ["edited_on"]
     ordering = ["edited_on"]
-    pagination_class = MyCustomPageNumberPagination
+    pagination_class = MyCustomCursorPaginator
 
     def get_queryset(self):
         queryset = figure_the_queryset_out(self.request, Suggestion, limit_list_view=True)
@@ -125,6 +125,7 @@ class OpinionCreateListView(generics.ListCreateAPIView):
     filterset_class = OpinionFilter
     ordering_fields = ["edited_on"]
     ordering = ["edited_on"]
+    pagination_class = MyCustomCursorPaginator
 
     def get_queryset(self):
 

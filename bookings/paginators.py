@@ -36,4 +36,4 @@ class MyCustomListOffsetPagination(pagination.LimitOffsetPagination):
 
 class MyCustomCursorPaginator(pagination.CursorPagination):
     page_size = 3
-    # ordering = "edited_on"
+    ordering = "edited_on"
