@@ -107,17 +107,23 @@ class ReservationSerializer(DynamicFieldsModelSerializer):
 
         # try except block in case it is the first registration and taken_spots is empty.
         try:
-            if (
+            # for 1 night reservations only check first date - the latter will be leaving date so someone can arrive that day in the afternoon
+            if len(new_reservation_days) == 2:
+                if new_reservation_days[0] not in taken_spots.get(selected_house.house_number):
+                    return True
+                    # otherwise check first and the last one for a quick check (reservations outside of current range)
+            elif (
                 end < taken_spots.get(selected_house.house_number)[0]
                 or start >= taken_spots.get(selected_house.house_number)[-1]
             ):
                 return True
 
             else:
-                #! first day may overlap -> end date = leave so we can have someone leaving and comming in on the same day
+                # first day may overlap -> end date = leave so we can have someone leaving and comming in on the same day
                 if new_reservation_days[1] not in taken_spots.get(
                     selected_house.house_number
                 ) and new_reservation_days[-1] not in taken_spots.get(selected_house.house_number):
+
                     return True
 
             raise exceptions.DatesNotAvailable(days=new_reservation_days)  # days att might be ditched if too exp.
@@ -251,7 +257,7 @@ class ChalletHouseSerializer(serializers.ModelSerializer):
         fields = ("house_number", "price_night", "url", "already_reserved_nights", "house_reservations")
 
     def get_already_reserved_nights(self, obj):
-
+        date_tracker = {}
         house = ChalletHouse.objects.get(house_number=obj.house_number)
         taken_spots = house.house_reservations.house_spots(house.house_number)
 

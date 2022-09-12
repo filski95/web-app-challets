@@ -1,8 +1,5 @@
-from datetime import timedelta
-
 from accounts.models import MyCustomUser
 from django.contrib.auth.models import AnonymousUser
-from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from django.db.models import Count, Q, Sum
 from django_filters import rest_framework as filters
@@ -12,7 +9,9 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
+from bookings import paginators
 from bookings.filters import HouseFilter, OpinionFilter, ReservationFilter, SuggestionFilter
+from bookings.paginators import MyCustomCursorPaginator, MyCustomListOffsetPagination, MyCustomPageNumberPagination
 from bookings.utils import my_date
 
 from .models import ChalletHouse, CustomerProfile, Opinion, Reservation, Suggestion
@@ -33,11 +32,22 @@ from .serializers import (
 def customer_profiles(request):
 
     if request.method == "GET":
-        all_customer_profilers = CustomerProfile.objects.all()
 
-        # context added cuz of the hyperlinked related field
+        # allow optional ordering by joined date. If not, default is id
+        if request.query_params.get("ordering") in ["joined", "-joined", "+joined"]:
+            all_customer_profilers = CustomerProfile.objects.all().order_by(request.query_params.get("ordering"))
+        else:
+            all_customer_profilers = CustomerProfile.objects.all().order_by("id")
+
+        paginator = MyCustomPageNumberPagination()
+        paginated_pages = paginator.paginate_queryset(all_customer_profilers, request)
+
+        if paginated_pages is not None:
+            # context added cuz of the hyperlinked related field
+            serializer = CustomerProfileSerializer(paginated_pages, many=True, context={"request": request})
+            return paginator.get_paginated_response(serializer.data)
+
         serializer = CustomerProfileSerializer(all_customer_profilers, many=True, context={"request": request})
-
         return Response(serializer.data, status.HTTP_200_OK)
 
 
@@ -68,11 +78,11 @@ def figure_the_queryset_out(request, model: models.Model, limit_list_view=False)
         if limit_list_view:
             if current_user.is_superuser == True:
                 # admin can see an entire list with all suggestions
-                queryset = model.objects.all()
+                queryset = model.objects.all().order_by("id")
             else:
-                queryset = model.objects.filter(author=current_user)
+                queryset = model.objects.filter(author=current_user).order_by("id")
         else:
-            queryset = model.objects.all()  # Opinions are allowed to be seen by everyone
+            queryset = model.objects.all().order_by("id")  # Opinions are allowed to be seen by everyone
     except TypeError:  # AnonymousUser cannot see any suggestions, user only his
         return None
     return queryset
@@ -88,6 +98,7 @@ class SuggestionUserListCreateView(generics.ListCreateAPIView):
     filterset_class = SuggestionFilter
     ordering_fields = ["edited_on"]
     ordering = ["edited_on"]
+    pagination_class = MyCustomCursorPaginator
 
     def get_queryset(self):
         queryset = figure_the_queryset_out(self.request, Suggestion, limit_list_view=True)
@@ -110,11 +121,11 @@ class SuggestionUserDetailView(generics.RetrieveUpdateAPIView):
 class OpinionCreateListView(generics.ListCreateAPIView):
     permission_classes = (AllowAny,)
     serializer_class = OpinionSerializer
-    filter_backends = (filters.DjangoFilterBackend, rest_filters.OrderingFilter)
+    filter_backends = (filters.DjangoFilterBackend,)
     filterset_class = OpinionFilter
-
     ordering_fields = ["edited_on"]
     ordering = ["edited_on"]
+    pagination_class = MyCustomCursorPaginator
 
     def get_queryset(self):
 
@@ -177,12 +188,17 @@ class ChalletHouseListView(generics.ListAPIView):
     filterset_class = HouseFilter
     ordering_fields = ["house_number", "sum_nights", "num_reservations"]  # see annotate [get_queryset]
     search_fields = ["house_reservations__reservation_number"]
+    pagination_class = MyCustomPageNumberPagination
 
     def get_queryset(self):
-        queryset = ChalletHouse.objects.prefetch_related(
-            "house_reservations__customer_profile", "house_reservations__reservation_owner"
-        ).annotate(num_reservations=Count("house_reservations"), sum_nights=Sum("house_reservations__nights"))
-
+        # order by added due to pagination.
+        queryset = (
+            ChalletHouse.objects.prefetch_related(
+                "house_reservations__customer_profile", "house_reservations__reservation_owner"
+            )
+            .annotate(num_reservations=Count("house_reservations"), sum_nights=Sum("house_reservations__nights"))
+            .order_by("house_number")
+        )
         return queryset
 
 
@@ -209,6 +225,7 @@ class ReservationsListViewSet(viewsets.ModelViewSet):
     filterset_class = ReservationFilter
     ordering_fields = ("reservation_number", "start_date")
     ordering = "start_date"
+    pagination_class = MyCustomListOffsetPagination
 
     def get_queryset(self):
 

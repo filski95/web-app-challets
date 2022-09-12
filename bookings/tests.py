@@ -15,7 +15,6 @@ from rest_framework.test import APITestCase
 
 from bookings.models import ChalletHouse, Opinion, Reservation, Suggestion
 from bookings.utils import my_date
-from bookings.views_api import ChalletHouseListView, ReservationsListViewSet
 
 from .filters import HouseFilter, OpinionFilter, ReservationFilter
 
@@ -420,7 +419,7 @@ class CustomerChalletHousesAPITest(APITestCase):
         url = reverse("bookings:challet_houses")
         response = self.client.get(url)
 
-        dates_str = [d for d in response.data[0].get("already_reserved_nights")]
+        dates_str = [d for d in response.data.get("results")[0].get("already_reserved_nights")]
         reservation = self.first_reservation
         no_content_list = [str(self.testuser.customerprofile), str(reservation.end_date)]
         content_list = [str(reservation.start_date)]
@@ -520,10 +519,11 @@ class CustomerChalletHousesAPITest(APITestCase):
         # admin sees all
         self.client.force_authenticate(self.admin_user)
         response = self.client.get(url)
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertContains(response, str(self.testuser.customerprofile))
         self.assertContains(response, str(self.testuser2.customerprofile))
-        self.assertEqual(len(response.data), Reservation.objects.count())
+        self.assertEqual(len(response.data.get("results")), Reservation.objects.count())
         self.assertContains(response, "reservation_url")
         self.assertNotContainsAll(response, ["created_at", "updated_at", "id", "reservation_owner"])
 
@@ -830,15 +830,18 @@ class FiltersTestingAPI(APITestCase):
         url = url + "?ordering=reservation_number"
 
         response = self.client.get(url)
-
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data[0].get("reservation_number"), self.reservation_1.reservation_number)
+        self.assertEqual(
+            response.data.get("results")[0].get("reservation_number"), self.reservation_1.reservation_number
+        )
 
         url = reverse("bookings:reservations")
         url = url + "?ordering=-reservation_number"  # reverse case
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data[0].get("reservation_number"), self.reservation_4.reservation_number)
+        self.assertEqual(
+            response.data.get("results")[0].get("reservation_number"), self.reservation_4.reservation_number
+        )
         self.client.logout()
 
     def test_opinion_filter(self):
