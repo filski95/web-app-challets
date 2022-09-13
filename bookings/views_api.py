@@ -1,15 +1,19 @@
+from datetime import timedelta
+
 from accounts.models import MyCustomUser
 from django.contrib.auth.models import AnonymousUser
 from django.db import models
 from django.db.models import Count, Q, Sum
 from django_filters import rest_framework as filters
 from rest_framework import filters as rest_filters
-from rest_framework import generics, status, viewsets
+from rest_framework import generics
+from rest_framework import serializers as rest_serializers
+from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
-from bookings import paginators
+from bookings import auxiliary
 from bookings.filters import HouseFilter, OpinionFilter, ReservationFilter, SuggestionFilter
 from bookings.paginators import MyCustomCursorPaginator, MyCustomListOffsetPagination, MyCustomPageNumberPagination
 from bookings.utils import my_date
@@ -23,6 +27,7 @@ from .serializers import (
     DetailViewReservationSerializer,
     OpinionSerializer,
     ReservationSerializer,
+    RunUpdatesSerializer,
     SuggestionSerializer,
 )
 
@@ -30,7 +35,6 @@ from .serializers import (
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
 def customer_profiles(request):
-
     if request.method == "GET":
 
         # allow optional ordering by joined date. If not, default is id
@@ -63,6 +67,35 @@ def single_profile(request, pk):
         serializer = CustomerProfileSerializer(profile, context={"request": request})
 
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["POST", "GET"])
+@permission_classes([IsAdminUser])
+def run_updates(request):
+
+    if request.method == "POST":
+
+        data_to_serialize = request.data
+        serializer = RunUpdatesSerializer(data_to_serialize)
+
+        if serializer.data.get("run_updates"):
+            customer_hierarchy = CustomerProfile.hierarchy
+            end_date = my_date.today() + timedelta(10)  # optional, manual testing mostly
+            all_current_reservations = (
+                Reservation.objects.filter(end_date__lte=end_date)
+                .exclude(status__in=[])
+                .select_related("customer_profile")
+            )
+
+            auxiliary.update_reservation_customerprofile(
+                all_current_reservations, customer_hierarchy, end_date=end_date
+            )
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    # mostly for the browsable api, other than that POST only would do
+    if request.method == "GET":
+        return Response({"run_updates": False}, status=status.HTTP_200_OK)
 
 
 def figure_the_queryset_out(request, model: models.Model, limit_list_view=False):
@@ -136,7 +169,6 @@ class OpinionCreateListView(generics.ListCreateAPIView):
         user = self.request.user
 
         if type(user) != AnonymousUser:
-
             serializer.save(author=user)
         else:
             serializer = self._check_if_anonymous_user_allowed_opinion(serializer)
@@ -155,12 +187,13 @@ class OpinionCreateListView(generics.ListCreateAPIView):
         if not (name and surname):
             raise TypeError("Anonymous users must provide name and surname")
 
-        # TODO
-        # TODO this needs to be amended to the user/customer profile with visits >= 1
-        # TODO
-        past_user = MyCustomUser.objects.filter(Q(name=name) & Q(surname=surname))
+        past_user = MyCustomUser.objects.filter(
+            Q(name=name) & Q(surname=surname) & Q(customerprofile__total_visits__gt=0)
+        )
         if len(past_user) < 1:
-            raise Opinion.DoesNotExist("I am sorry, We Did not find any customer with such name and surname")
+            raise Opinion.DoesNotExist(
+                "I am sorry, We Did not find any customer who visited us with such name and surname"
+            )
 
         return serializer
 
@@ -273,6 +306,31 @@ class ReservationRetrieveUpdate(generics.RetrieveUpdateAPIView):
         obj = self.get_object()
 
         serializer.save(obj=obj)
+
+    def get_serializer_class(self):
+
+        # if admin then return a default serializer with complete option as well (status)
+        if self.request.user.is_admin:
+            return super().get_serializer_class()
+
+        # otherwise let the user only see 3 options -> complete option done automatically after stay
+        CONFIRMED = 1
+        NOT_CONFIRMED = 0
+        CANCELLED = 9
+        choices = (
+            (CONFIRMED, "Reservation confirmed"),
+            (NOT_CONFIRMED, "Reservation not confirmed"),
+            (CANCELLED, "Reservation is cancelled"),
+        )
+
+        class TweakedDetailViewReservationSerializer(DetailViewReservationSerializer):
+            status = rest_serializers.ChoiceField(choices=choices, source="get_status_display")
+
+            class Meta:
+                model = Reservation
+                fields = "__all__"
+
+        return TweakedDetailViewReservationSerializer
 
 
 class ReservationCreateView(generics.CreateAPIView):

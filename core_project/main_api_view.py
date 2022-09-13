@@ -19,5 +19,6 @@ def api_root(request, format=None):
             "past_reservations": reverse("bookings:past_reservations", request=request, format=format),
             "create_reservation": reverse("bookings:reservation_create", request=request, format=format),
             "registration": "/api/registration/",
+            "run_updates": reverse("bookings:run_updates", request=request, format=format),
         }
     )

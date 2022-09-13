@@ -284,6 +284,10 @@ class CustomerProfileAPITest(APITestCase):
             "surname": self.testuser.surname,
         }
 
+        # total visits > 0, otheriwse exception raised
+        self.testuser.customerprofile.total_visits = 1
+        self.testuser.customerprofile.save()
+
         new_opinion = Opinion.objects.all().last()
 
         response = self.client.post(url, data=data3)

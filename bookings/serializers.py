@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from rest_framework import serializers
 
@@ -10,10 +10,13 @@ class CustomerProfileSerializer(serializers.HyperlinkedModelSerializer):
 
     user = serializers.HyperlinkedRelatedField(read_only=True, view_name="accounts:user_detail", lookup_field="slug")
     url = serializers.HyperlinkedIdentityField(read_only=True, view_name="bookings:single_customer")
+    reservation_set = serializers.HyperlinkedRelatedField(
+        many=True, read_only=True, view_name="bookings:reservation_detail"
+    )
 
     class Meta:
         model = CustomerProfile
-        fields = ("joined", "status", "total_visits", "user", "url")
+        fields = ("joined", "status", "total_visits", "user", "url", "reservation_set")
 
 
 class SuggestionSerializer(serializers.ModelSerializer):
@@ -33,6 +36,19 @@ class OpinionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Opinion
         fields = ("title", "main_text", "image", "name", "surname", "author", "url", "provided_on", "edited_on")
+
+    def get_fields(self, *args, **kwargs):
+        """
+        logged in user does not have the option to provie user name and surname. List view [GET] does not show name and surname
+        -> Only "Anonimowy Uzytkownik", so the sentinel user
+        """
+        fields = super().get_fields(*args, **kwargs)
+
+        if self.context.get("request").user.is_authenticated or self.context.get("request").method == "GET":
+            fields.pop("name")
+            fields.pop("surname")
+            return fields
+        return fields
 
 
 class DynamicFieldsModelSerializer(serializers.ModelSerializer):
@@ -111,7 +127,7 @@ class ReservationSerializer(DynamicFieldsModelSerializer):
             if len(new_reservation_days) == 2:
                 if new_reservation_days[0] not in taken_spots.get(selected_house.house_number):
                     return True
-                    # otherwise check first and the last one for a quick check (reservations outside of current range)
+            # otherwise check first and the last one quickly (reservations outside of current range)
             elif (
                 end < taken_spots.get(selected_house.house_number)[0]
                 or start >= taken_spots.get(selected_house.house_number)[-1]
@@ -257,7 +273,7 @@ class ChalletHouseSerializer(serializers.ModelSerializer):
         fields = ("house_number", "price_night", "url", "already_reserved_nights", "house_reservations")
 
     def get_already_reserved_nights(self, obj):
-        date_tracker = {}
+
         house = ChalletHouse.objects.get(house_number=obj.house_number)
         taken_spots = house.house_reservations.house_spots(house.house_number)
 
@@ -282,3 +298,8 @@ class ChalletHouseSerializer(serializers.ModelSerializer):
             serializer = BasicReservationSerializer(reservations, many=True, context=serializer_context)
 
         return serializer.data
+
+
+class RunUpdatesSerializer(serializers.Serializer):
+
+    run_updates = serializers.BooleanField(default=False)
