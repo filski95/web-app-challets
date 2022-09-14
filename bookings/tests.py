@@ -1,8 +1,12 @@
+import datetime
 import io
+import json
 import os
-from datetime import date
+from datetime import date, timedelta
+from unittest import mock
 
 from accounts.models import MyCustomUser
+from django.db.models import Count, Q, Sum
 from django.test import TestCase
 from django.urls import reverse
 from PIL import Image
@@ -10,7 +14,10 @@ from rest_framework import status
 from rest_framework.parsers import JSONParser
 from rest_framework.test import APITestCase
 
-from bookings.models import ChalletHouse, Opinion, Reservation, Suggestion
+from bookings.models import ChalletHouse, CustomerProfile, Opinion, Reservation, Suggestion
+from bookings.utils import my_date
+
+from .filters import HouseFilter, OpinionFilter, ReservationFilter
 
 
 class CustomerProfileTest(TestCase):
@@ -169,11 +176,10 @@ class CustomerProfileAPITest(APITestCase):
         """annonymous user can send suggestions -> sentinel user attached to the suggestion obj."""
 
         url = reverse("bookings:suggestions")
-        # should be empty list
-        response_get = self.client.get(url)
 
+        response_get = self.client.get(url)
         self.assertEqual(response_get.status_code, status.HTTP_200_OK)
-        self.assertContains(response_get, [])
+        self.assertContainsAll(response_get, [self.suggestion1.title, self.suggestion2.title])
 
         suggestion3 = {"title": "suggestion3", "main_text": "nice suggestion3"}
         response = self.client.post(url, data=suggestion3)
@@ -278,6 +284,10 @@ class CustomerProfileAPITest(APITestCase):
             "name": self.testuser.name,
             "surname": self.testuser.surname,
         }
+
+        # total visits > 0, otheriwse exception raised
+        self.testuser.customerprofile.total_visits = 1
+        self.testuser.customerprofile.save()
 
         new_opinion = Opinion.objects.all().last()
 
@@ -406,21 +416,25 @@ class CustomerChalletHousesAPITest(APITestCase):
         self.assertTrue(total_count == 0)
 
     def test_challet_house_list_view(self):
-        """list view -> allow any only get allowed. Test written assuming there are 2 reservations"""
+        """
+        list view -> allow any only get allowed. Test written assuming there are 2 reservations
+        fields with house_reservations yield results to their owners or admins only
+        """
 
         url = reverse("bookings:challet_houses")
         response = self.client.get(url)
-        # response.data = [ordered_dict ... (house_nb : already_reserved_nights: [dates])]
-        dates_str = [str(d) for d in response.data[0].get("already_reserved_nights").get(self.house_nb_1.house_number)]
-        reservation = self.first_reservation
-        content_list = [str(self.testuser.customerprofile), reservation.start_date, reservation.end_date]
 
+        dates_str = [d for d in response.data.get("results")[0].get("already_reserved_nights")]
+        reservation = self.first_reservation
+        no_content_list = [str(self.testuser.customerprofile), str(reservation.end_date)]
+        content_list = [str(reservation.start_date)]
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotContainsAll(response, no_content_list)
         self.assertContainsAll(response, content_list)
-        all_nights = self.return_all_nights() + 2
-        self.assertEqual(len(dates_str), all_nights)
-        self.assertEqual(dates_str[0], str(reservation.start_date))
-        self.assertEqual(dates_str[-1], str(self.last_reservation.end_date))
+        all_nights = self.return_all_nights() + 1  # last date is a "go home day" so the night can be booked
+        self.assertEqual(len(dates_str), all_nights - 1)
+        self.assertEqual(dates_str[0], reservation.start_date)
+        self.assertEqual(dates_str[-1], self.last_reservation.end_date - datetime.timedelta(1))
         self.assertEqual(reservation.total_price, reservation.nights * self.house_nb_1.price_night)
 
         response_post = self.client.post(url, data={"price_night": 350, "house_number": 2})
@@ -437,27 +451,26 @@ class CustomerChalletHousesAPITest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         response = self.client.get(url)
 
-        # response data = {..already_reserved_nights: house_nb: dates.... 'house_reservations':Ordered_Dict ->}
-        dates_str = [str(d) for d in response.data.get("already_reserved_nights").get(self.house_nb_1.house_number)]
-
-        # print(response.data.get("already_reserved_nights").get(self.house_nb_1.house_number))
+        dates_str = [d for d in response.data.get("already_reserved_nights")]
         reservation = self.first_reservation
-        content_list = [str(self.testuser.customerprofile), reservation.start_date, reservation.end_date]
+        no_content_list = [str(self.testuser.customerprofile), str(reservation.end_date)]
+        content_list = [str(reservation.start_date)]
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotContainsAll(response, no_content_list)
         self.assertContainsAll(response, content_list)
-        all_nights = self.return_all_nights() + 2
-        self.assertEqual(len(dates_str), all_nights)
-        self.assertEqual(dates_str[0], str(reservation.start_date))
-        self.assertEqual(dates_str[-1], str(self.last_reservation.end_date))
+        all_nights = self.return_all_nights() + 1  # last date is a "go home day" so the night can be booked
+        self.assertEqual(len(dates_str), all_nights - 1)
+        self.assertEqual(dates_str[0], reservation.start_date)
+        self.assertEqual(dates_str[-1], self.last_reservation.end_date - datetime.timedelta(1))
         self.assertEqual(reservation.total_price, reservation.nights * self.house_nb_1.price_night)
 
         response_post = self.client.post(url, data={"price_night": 350, "house_number": 2})
         self.assertEqual(response_post.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
         response_put = self.client.put(url, data={"price_night": 350, "house_number": 1})
         self.assertEqual(response_put.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
-        # lists house reservations properly
-        self.assertEqual(len(response.data.get("house_reservations")), Reservation.objects.count())
+        # lists house reservations properly -> not logged in user
+        self.assertEqual(len(response.data.get("house_reservations")), 0)
 
     def test_reservation_create_view(self):
 
@@ -506,16 +519,16 @@ class CustomerChalletHousesAPITest(APITestCase):
         self.client.force_authenticate(self.testuser)
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertContains(response, str(self.testuser.customerprofile))
         self.assertNotContains(response, str(self.testuser2.customerprofile))
         self.client.logout()
         # admin sees all
         self.client.force_authenticate(self.admin_user)
         response = self.client.get(url)
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertContains(response, str(self.testuser.customerprofile))
         self.assertContains(response, str(self.testuser2.customerprofile))
-        self.assertEqual(len(response.data), Reservation.objects.count())
+        self.assertEqual(len(response.data.get("results")), Reservation.objects.count())
         self.assertContains(response, "reservation_url")
         self.assertNotContainsAll(response, ["created_at", "updated_at", "id", "reservation_owner"])
 
@@ -610,3 +623,374 @@ class CustomerChalletHousesAPITest(APITestCase):
                 f"http://0.0.0.0:8000/bookings/reservations/{self.first_reservation.id}/",
             ],
         )
+
+    @mock.patch("bookings.utils.my_date.today")
+    def test_validate_future_date_past_reservation_list_records(self, d):
+        """
+        changing the return of my_date.today() to a date past reservations
+        admin should see all of them
+        """
+        my_date.today.return_value = date(2022, 12, 25)
+        url = reverse("bookings:past_reservations")
+        self.client.force_authenticate(self.admin_user)
+        response = self.client.get(url)
+
+        self.assertEqual(len(response.data), Reservation.objects.count())
+        self.client.logout()
+
+        # user sees only his past reservations
+        self.client.force_authenticate(self.testuser)
+        response = self.client.get(url)
+        self.assertEqual(len(response.data), len(Reservation.objects.filter(reservation_owner=self.testuser)))
+
+
+class FiltersTestingAPI(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.house_nb_1 = ChalletHouse.objects.create(price_night=350, house_number=1)
+        cls.house_nb_2 = ChalletHouse.objects.create(price_night=350, house_number=2)
+        cls.house_nb_3 = ChalletHouse.objects.create(price_night=350, house_number=3)
+
+        cls.testuser = MyCustomUser.objects.create_user(
+            email="test@gmail.com",
+            name="testname",
+            surname="testsurname",
+            date_of_birth=date(1995, 10, 10),
+            password="adminadmin1",
+        )
+
+        cls.admin_user = MyCustomUser.objects.create_superuser(
+            email="admin@gmail.com",
+            name="filip",
+            surname="admins",
+            date_of_birth=date(1995, 10, 10),
+            password="passwordtest123",
+        )
+
+        cls.reservation_1 = Reservation.objects.create(
+            customer_profile=cls.testuser.customerprofile,
+            reservation_owner=cls.testuser,
+            house=cls.house_nb_1,
+            start_date=my_date.today() + timedelta(5),
+            end_date=my_date.today() + timedelta(7),
+        )
+
+        cls.reservation_2 = Reservation.objects.create(
+            customer_profile=cls.testuser.customerprofile,
+            reservation_owner=cls.testuser,
+            house=cls.house_nb_2,
+            start_date=my_date.today() + timedelta(30),
+            end_date=my_date.today() + timedelta(35),
+        )
+        cls.reservation_3 = Reservation.objects.create(
+            customer_profile=cls.testuser.customerprofile,
+            reservation_owner=cls.testuser,
+            house=cls.house_nb_2,
+            start_date=date(2023, 11, 10),
+            end_date=date(2023, 11, 14),
+        )
+        cls.reservation_4 = Reservation.objects.create(
+            customer_profile=cls.testuser.customerprofile,
+            reservation_owner=cls.testuser,
+            house=cls.house_nb_2,
+            start_date=my_date.today(),
+            end_date=my_date.today() + datetime.timedelta(2),
+        )
+
+        cls.queryset = ChalletHouse.objects.prefetch_related(
+            "house_reservations__customer_profile", "house_reservations__reservation_owner"
+        ).annotate(num_reservations=Count("house_reservations"), sum_nights=Sum("house_reservations__nights"))
+        cls.q_admin_reserv = Reservation.objects.filter(Q(end_date__gte=my_date.today())).order_by(
+            "house", "start_date"
+        )
+
+        cls.suggestion1 = Suggestion.objects.create(
+            title="test suggestion",
+            main_text="nice suggestion",
+            author=cls.testuser,
+        )
+        cls.suggestion2 = Suggestion.objects.create(
+            title="test suggestion2",
+            main_text="nice suggestion2",
+            author=cls.testuser,
+        )
+
+        cls.opinion = Opinion.objects.create(
+            title="test opinion",
+            main_text="nice suggestion",
+            author=cls.testuser,
+        )
+        cls.opinion2 = Opinion.objects.create(
+            title="different opinion",
+            main_text="nice anonymous suggestion",
+            author=cls.testuser,
+        )
+
+    def check_if_all_returned(self, queryset, set_of_objects):
+        for o in queryset:
+            if o not in set_of_objects:
+                return False
+        return True
+
+    def test_calculate_nights_method_filter(self):
+
+        # qs coppied from the list view
+        # <QuerySet [<ChalletHouse: Domek numer 1>, <ChalletHouse: Domek numer 2>, <ChalletHouse: Domek numer 3>]>
+        qs = self.queryset
+        f = HouseFilter()
+
+        results_5 = f.calculate_nights(qs, "house_reservations", qs[0].sum_nights)  # 5
+
+        self.assertEqual(len(results_5), 1)
+        self.assertEqual(results_5.get(), self.house_nb_1)  # results => queryset
+
+        results_4 = f.calculate_nights(qs, "house_reservations", self.reservation_2.nights + 10)  # 4
+        self.assertEqual(len(results_4), 0)
+
+        results_8 = f.calculate_nights(qs, "house_reservations", (qs[1].sum_nights))
+        self.assertEqual(len(results_8), 1)
+        self.assertEqual(results_8.get(), self.house_nb_2)
+
+        results_8_or_less = f.calculate_nights(qs, "house_reservations_lte", (qs[1].sum_nights))
+
+        self.assertEqual(len(results_8_or_less), 2)
+        self.assertTrue(self.check_if_all_returned(results_8_or_less, {self.house_nb_1, self.house_nb_2}))
+
+        results_9_or_more = f.calculate_nights(qs, "home_reservations_gte", ((qs[1].sum_nights) + 1))
+        self.assertEqual(len(results_9_or_more), 0)
+
+        results_8_or_more = f.calculate_nights(qs, "home_reservations_gte", (qs[1].sum_nights))
+        self.assertEqual(len(results_8_or_more), 1)
+
+    def test_house_filter_start_date_range(self):
+
+        # make sure nothing with the starting day yesterday is listed
+        data = {"start_date_range": "yesterday"}
+        results = HouseFilter(data, self.queryset)
+        self.assertEqual(len(results.qs), 0)
+        # check if a house 2 whose one reservation starts today is listed
+        data = {"start_date_range": "today"}
+        results = HouseFilter(data, self.queryset)
+        self.assertTrue(self.check_if_all_returned(results.qs, [self.house_nb_2]))
+
+        # test if all houses with reservations starting within a year are listed
+        data = {"start_date_range": "year"}
+        results = HouseFilter(data, self.queryset)
+        self.assertTrue(self.check_if_all_returned(results.qs, [self.house_nb_2, self.house_nb_1]))
+
+    def test_house_filter_start(self):
+
+        # shows only 1 record with a house 2 where reservation is created today.
+        data = {"house_reservations__start_date": my_date.today()}
+        results = HouseFilter(data, self.queryset)
+        self.assertEqual(len(results.qs), 1)
+        self.assertTrue(self.check_if_all_returned(results.qs, [self.house_nb_2]))
+
+        # no reservation with start date in the past
+        data = {"house_reservations__start_date": (my_date.today() - timedelta(1))}
+        results = HouseFilter(data, self.queryset)
+        self.assertEqual(len(results.qs), 0)
+
+        data = {"house_reservations__start_date__gte": my_date.today()}
+        results = HouseFilter(data, self.queryset)
+
+        self.assertEqual(len(results.qs), ChalletHouse.objects.filter(~Q(house_reservations=None)).count())
+        self.assertTrue(self.check_if_all_returned(results.qs, [self.house_nb_2, self.house_nb_1]))
+
+    def test_house_filter_number_of_reservations(self):
+        data = {"num_reservations": self.house_nb_1.house_reservations.all().count()}
+        results = HouseFilter(data, self.queryset)
+
+        self.assertTrue(self.check_if_all_returned(results.qs, [self.house_nb_1]))
+
+    def test_reservations_filter(self):
+        data = {"reservation_number": self.reservation_4.reservation_number}
+        results = ReservationFilter(data, self.q_admin_reserv)
+        self.assertEqual(len(results.qs), 1)
+        self.assertEqual(results.qs.get(), self.reservation_4)
+
+        data = {"house": self.house_nb_1.house_number}
+        results = ReservationFilter(data, self.q_admin_reserv)
+        self.assertEqual(len(results.qs), len(Reservation.objects.filter(house=self.house_nb_1)))
+
+        data = {"status": 0}
+        results = ReservationFilter(data, self.q_admin_reserv)
+        self.assertEqual(len(results.qs), len(Reservation.objects.filter(status=0)))
+
+        data = {"start_date__gte": self.reservation_2.start_date}
+        results = ReservationFilter(data, self.q_admin_reserv)
+        self.assertEqual(
+            len(results.qs), len(Reservation.objects.filter(start_date__gte=self.reservation_2.start_date))
+        )
+
+        data = {"start_date__lte": self.reservation_2.start_date}
+        results = ReservationFilter(data, self.q_admin_reserv)
+        self.assertEqual(
+            len(results.qs), len(Reservation.objects.filter(start_date__lte=self.reservation_2.start_date))
+        )
+
+    def test_reservations_ordering(self):
+        self.client.force_authenticate(self.admin_user)
+        url = reverse("bookings:reservations")
+        url = url + "?ordering=reservation_number"
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data.get("results")[0].get("reservation_number"), self.reservation_1.reservation_number
+        )
+
+        url = reverse("bookings:reservations")
+        url = url + "?ordering=-reservation_number"  # reverse case
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data.get("results")[0].get("reservation_number"), self.reservation_4.reservation_number
+        )
+        self.client.logout()
+
+    def test_opinion_filter(self):
+        data = {"title__icontains": self.opinion.title}
+        opinion_queryset = Opinion.objects.all()
+        results = OpinionFilter(data, opinion_queryset)
+        self.assertEqual(len(results.qs), len(Opinion.objects.filter(title__icontains=self.opinion.title)))
+
+        data = {"author": self.admin_user}
+        results = OpinionFilter(data, opinion_queryset)
+        self.assertEqual(len(results.qs), 0)  # 0 opinions created by Admin
+
+        data = {"author": self.testuser}
+        results = OpinionFilter(data, opinion_queryset)
+        self.assertEqual(len(results.qs), 2)  # all opinions
+
+
+class ReservationsCustomerProfileUpdate(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.house_nb_1 = ChalletHouse.objects.create(price_night=350, house_number=1)
+        cls.house_nb_2 = ChalletHouse.objects.create(price_night=350, house_number=2)
+
+        cls.testuser = MyCustomUser.objects.create_user(
+            email="test@gmail.com",
+            name="testname",
+            surname="testsurname",
+            date_of_birth=date(1995, 10, 10),
+            password="adminadmin1",
+        )
+
+        cls.admin_user = MyCustomUser.objects.create_superuser(
+            email="admin@gmail.com",
+            name="filip",
+            surname="admins",
+            date_of_birth=date(1995, 10, 10),
+            password="passwordtest123",
+        )
+
+        cls.reservation_1 = Reservation.objects.create(
+            customer_profile=cls.testuser.customerprofile,
+            reservation_owner=cls.testuser,
+            house=cls.house_nb_1,
+            start_date=date.today() + timedelta(5),
+            end_date=date.today() + timedelta(7),
+        )
+
+        cls.reservation_2 = Reservation.objects.create(
+            customer_profile=cls.testuser.customerprofile,
+            reservation_owner=cls.testuser,
+            house=cls.house_nb_2,
+            start_date=date.today() + timedelta(30),
+            end_date=date.today() + timedelta(35),
+        )
+        cls.reservation_3 = Reservation.objects.create(
+            customer_profile=cls.testuser.customerprofile,
+            reservation_owner=cls.testuser,
+            house=cls.house_nb_2,
+            start_date=date(2023, 11, 10),
+            end_date=date(2023, 11, 14),
+        )
+        cls.reservation_4 = Reservation.objects.create(
+            customer_profile=cls.testuser.customerprofile,
+            reservation_owner=cls.testuser,
+            house=cls.house_nb_2,
+            start_date=date.today(),
+            end_date=date.today() + datetime.timedelta(2),
+        )
+
+    def test_run_updates_access(self):
+        """run updates endpoint admin only"""
+
+        url = reverse("bookings:run_updates")
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        self.client.login(email="test@gmail.com", password="adminadmin1")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.client.login(email="admin@gmail.com", password="passwordtest123")
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, {"run_updates": False})  # default bool is False
+        self.assertContains(response, "run_updates")
+
+    def test_reservation_customer_profile_status_initial(self):
+        """
+        all reservations have 0 status by default - not confirmed.
+        Not confirmed reservation is still considered valid and will be considered "completed" after the end date passed
+        """
+        self.assertEqual(self.reservation_4.status, 0)
+        self.assertEqual(self.reservation_3.status, 0)
+        self.assertEqual(self.reservation_2.status, 0)
+        self.assertEqual(self.reservation_1.status, 0)
+        self.assertEqual(self.testuser.customerprofile.status, "N")
+        self.assertEqual(self.testuser.customerprofile.total_visits, 0)
+
+    @mock.patch("bookings.utils.my_date.today")
+    def test_run_updates_run_reservation_status(self, date_mock):
+        my_date.today.return_value = date.today() + timedelta(15)
+
+        url = reverse("bookings:run_updates")
+        self.client.login(email="admin@gmail.com", password="passwordtest123")
+        data = {"run_updates": True}
+
+        response = self.client.post(url, data=data)
+        self.assertEqual(response.data, {"run_updates": True})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        for r in [self.reservation_1, self.reservation_2, self.reservation_3, self.reservation_4]:
+            r.refresh_from_db()
+        self.assertEqual(self.reservation_4.status, 99)
+        self.assertEqual(self.reservation_3.status, 0)
+        self.assertEqual(self.reservation_2.status, 0)
+        self.assertEqual(self.reservation_1.status, 99)
+
+    @mock.patch("bookings.utils.my_date.today")
+    def test_run_updates_run_customerprofile_status(self, date_mock):
+        my_date.today.return_value = date.today() + timedelta(15)
+
+        house = self.house_nb_2
+        profile = self.testuser.customerprofile
+        owner = self.testuser
+        start_date = date.today() + timedelta(3)
+        end_date = date.today() + timedelta(4)
+
+        for i in range(5):
+            Reservation.objects.create(
+                customer_profile=profile,
+                reservation_owner=owner,
+                house=house,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            start_date += timedelta(1)
+            end_date += timedelta(1)
+
+        url = reverse("bookings:run_updates")
+        self.client.login(email="admin@gmail.com", password="passwordtest123")
+        data = {"run_updates": True}
+        response = self.client.post(url, data=data)
+        profile.refresh_from_db()
+
+        self.assertEqual(profile.status, "R")

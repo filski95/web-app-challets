@@ -72,7 +72,6 @@ class MyCustomUserSerializer(serializers.Serializer):
         - customerprofile field to be visible only for users with admin status.
         """
         fields = super().get_fields(*args, **kwargs)
-        # context = {'request': <rest_framework.request.Request: GET '/accounts/users/askdaskd-askdaskda-396'>}
         request = self.context.get("request")
 
         if isinstance(request.user, AnonymousUser) or request.user.is_admin is False:
