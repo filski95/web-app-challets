@@ -8,6 +8,7 @@ from . import auxiliary
 
 
 class CustomerProfile(models.Model):
+    hierarchy = {"N": 4, "R": 10, "S": 11}
     NEW_CUSTOMER = "N"
     REGULAR = "R"
     SUPER = "S"
@@ -78,11 +79,13 @@ class Reservation(models.Model):
     CONFIRMED = 1
     NOT_CONFIRMED = 0
     CANCELLED = 9
+    COMPLETED = 99
 
     STATUS_CHOICES = [
         (CONFIRMED, "Reservation confirmed"),
         (NOT_CONFIRMED, "Reservation not confirmed"),
-        (CANCELLED, "Reservation has been cancelled"),
+        (CANCELLED, "Reservation is cancelled"),
+        (COMPLETED, "Reservation is completed"),
     ]
 
     customer_profile = models.ForeignKey(CustomerProfile, on_delete=models.CASCADE)

@@ -24,4 +24,5 @@ urlpatterns = [
     ),
     path("reservations/<int:pk>/", views_api.ReservationRetrieveUpdate.as_view(), name="reservation_detail"),
     path("reservations/create/", views_api.ReservationCreateView.as_view(), name="reservation_create"),
+    path("admin_func/", views_api.run_updates, name="run_updates"),
 ]

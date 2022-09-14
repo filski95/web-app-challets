@@ -11,7 +11,7 @@ class CustomerInline(admin.StackedInline):
 
     model = CustomerProfile
     verbose_name_plural = "Customers"
-    readonly_fields = ("surname", "first_name", "joined")
+    readonly_fields = ("surname", "first_name", "joined", "status")
 
 
 class CustomerProfileAdmin(admin.ModelAdmin):
