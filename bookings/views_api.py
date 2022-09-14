@@ -80,10 +80,10 @@ def run_updates(request):
 
         if serializer.data.get("run_updates"):
             customer_hierarchy = CustomerProfile.hierarchy
-            end_date = my_date.today() + timedelta(10)  # optional, manual testing mostly
+            end_date = my_date.today() + timedelta(10)  #! optional, manual testing mostly
             all_current_reservations = (
                 Reservation.objects.filter(end_date__lte=end_date)
-                .exclude(status__in=[])
+                .exclude(status__in=[9, 99])
                 .select_related("customer_profile")
             )
 

@@ -1,5 +1,6 @@
 import datetime
 import io
+import json
 import os
 from datetime import date, timedelta
 from unittest import mock
@@ -13,7 +14,7 @@ from rest_framework import status
 from rest_framework.parsers import JSONParser
 from rest_framework.test import APITestCase
 
-from bookings.models import ChalletHouse, Opinion, Reservation, Suggestion
+from bookings.models import ChalletHouse, CustomerProfile, Opinion, Reservation, Suggestion
 from bookings.utils import my_date
 
 from .filters import HouseFilter, OpinionFilter, ReservationFilter
@@ -670,8 +671,8 @@ class FiltersTestingAPI(APITestCase):
             customer_profile=cls.testuser.customerprofile,
             reservation_owner=cls.testuser,
             house=cls.house_nb_1,
-            start_date=my_date.today() + timedelta(25),
-            end_date=my_date.today() + timedelta(28),
+            start_date=my_date.today() + timedelta(5),
+            end_date=my_date.today() + timedelta(7),
         )
 
         cls.reservation_2 = Reservation.objects.create(
@@ -861,3 +862,135 @@ class FiltersTestingAPI(APITestCase):
         data = {"author": self.testuser}
         results = OpinionFilter(data, opinion_queryset)
         self.assertEqual(len(results.qs), 2)  # all opinions
+
+
+class ReservationsCustomerProfileUpdate(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.house_nb_1 = ChalletHouse.objects.create(price_night=350, house_number=1)
+        cls.house_nb_2 = ChalletHouse.objects.create(price_night=350, house_number=2)
+
+        cls.testuser = MyCustomUser.objects.create_user(
+            email="test@gmail.com",
+            name="testname",
+            surname="testsurname",
+            date_of_birth=date(1995, 10, 10),
+            password="adminadmin1",
+        )
+
+        cls.admin_user = MyCustomUser.objects.create_superuser(
+            email="admin@gmail.com",
+            name="filip",
+            surname="admins",
+            date_of_birth=date(1995, 10, 10),
+            password="passwordtest123",
+        )
+
+        cls.reservation_1 = Reservation.objects.create(
+            customer_profile=cls.testuser.customerprofile,
+            reservation_owner=cls.testuser,
+            house=cls.house_nb_1,
+            start_date=date.today() + timedelta(5),
+            end_date=date.today() + timedelta(7),
+        )
+
+        cls.reservation_2 = Reservation.objects.create(
+            customer_profile=cls.testuser.customerprofile,
+            reservation_owner=cls.testuser,
+            house=cls.house_nb_2,
+            start_date=date.today() + timedelta(30),
+            end_date=date.today() + timedelta(35),
+        )
+        cls.reservation_3 = Reservation.objects.create(
+            customer_profile=cls.testuser.customerprofile,
+            reservation_owner=cls.testuser,
+            house=cls.house_nb_2,
+            start_date=date(2023, 11, 10),
+            end_date=date(2023, 11, 14),
+        )
+        cls.reservation_4 = Reservation.objects.create(
+            customer_profile=cls.testuser.customerprofile,
+            reservation_owner=cls.testuser,
+            house=cls.house_nb_2,
+            start_date=date.today(),
+            end_date=date.today() + datetime.timedelta(2),
+        )
+
+    def test_run_updates_access(self):
+        """run updates endpoint admin only"""
+
+        url = reverse("bookings:run_updates")
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        self.client.login(email="test@gmail.com", password="adminadmin1")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.client.login(email="admin@gmail.com", password="passwordtest123")
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, {"run_updates": False})  # default bool is False
+        self.assertContains(response, "run_updates")
+
+    def test_reservation_customer_profile_status_initial(self):
+        """
+        all reservations have 0 status by default - not confirmed.
+        Not confirmed reservation is still considered valid and will be considered "completed" after the end date passed
+        """
+        self.assertEqual(self.reservation_4.status, 0)
+        self.assertEqual(self.reservation_3.status, 0)
+        self.assertEqual(self.reservation_2.status, 0)
+        self.assertEqual(self.reservation_1.status, 0)
+        self.assertEqual(self.testuser.customerprofile.status, "N")
+        self.assertEqual(self.testuser.customerprofile.total_visits, 0)
+
+    @mock.patch("bookings.utils.my_date.today")
+    def test_run_updates_run_reservation_status(self, date_mock):
+        my_date.today.return_value = date.today() + timedelta(15)
+
+        url = reverse("bookings:run_updates")
+        self.client.login(email="admin@gmail.com", password="passwordtest123")
+        data = {"run_updates": True}
+
+        response = self.client.post(url, data=data)
+        self.assertEqual(response.data, {"run_updates": True})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        for r in [self.reservation_1, self.reservation_2, self.reservation_3, self.reservation_4]:
+            r.refresh_from_db()
+        self.assertEqual(self.reservation_4.status, 99)
+        self.assertEqual(self.reservation_3.status, 0)
+        self.assertEqual(self.reservation_2.status, 0)
+        self.assertEqual(self.reservation_1.status, 99)
+
+    @mock.patch("bookings.utils.my_date.today")
+    def test_run_updates_run_customerprofile_status(self, date_mock):
+        my_date.today.return_value = date.today() + timedelta(15)
+
+        house = self.house_nb_2
+        profile = self.testuser.customerprofile
+        owner = self.testuser
+        start_date = date.today() + timedelta(3)
+        end_date = date.today() + timedelta(4)
+
+        for i in range(5):
+            Reservation.objects.create(
+                customer_profile=profile,
+                reservation_owner=owner,
+                house=house,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            start_date += timedelta(1)
+            end_date += timedelta(1)
+
+        url = reverse("bookings:run_updates")
+        self.client.login(email="admin@gmail.com", password="passwordtest123")
+        data = {"run_updates": True}
+        response = self.client.post(url, data=data)
+        profile.refresh_from_db()
+
+        self.assertEqual(profile.status, "R")
