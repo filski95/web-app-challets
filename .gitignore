@@ -5,6 +5,7 @@ venv
 commands.txt
 env
 notes.txt
+celerybeat*
 
 # Django #
 *.log

@@ -2,6 +2,8 @@ import logging
 from datetime import datetime
 from functools import wraps as functool_wraps
 
+from .tasks import send_email_notification
+
 
 def communicate_user_creation(for_user=False, log=False):
     def actual_decorator(func):
@@ -14,8 +16,8 @@ def communicate_user_creation(for_user=False, log=False):
                 name = kwargs.get("name")
                 surname = kwargs.get("surname")
                 email = kwargs.get("email")
-                # could be replaced with email or smth / send_email()
-                print(f"A user {name} {surname} with {email} has been created")
+
+                send_email_notification.delay(name, surname, email)
             if log:
                 email = kwargs.get("email")
                 logging.basicConfig(filename="accounts/user_creation.log", level=logging.INFO, force=True)
