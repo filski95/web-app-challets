@@ -8,6 +8,7 @@ from . import auxiliary
 
 
 class CustomerProfile(models.Model):
+    # hierarchy deployed in other modules when changing statuses
     hierarchy = {"N": 4, "R": 10, "S": 11}
     NEW_CUSTOMER = "N"
     REGULAR = "R"
@@ -111,9 +112,8 @@ class Reservation(models.Model):
     objects = auxiliary.ChalletSpotQuerySet()
 
     def save(self, *args, **kwargs):
-        # todo check if changed?
-        cancellation = kwargs.pop("cancellation", None)
 
+        cancellation = kwargs.pop("cancellation", None)
         # cancellation means that start and end date of a stay are transformed into Nones
         # calculation of nights would crash -> if stmt to avoid it
         if not cancellation:

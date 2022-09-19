@@ -1,6 +1,5 @@
 import datetime
 import io
-import json
 import os
 from datetime import date, timedelta
 from unittest import mock
@@ -8,6 +7,7 @@ from unittest import mock
 from accounts.models import MyCustomUser
 from django.db.models import Count, Q, Sum
 from django.test import TestCase
+from django.test.utils import override_settings
 from django.urls import reverse
 from PIL import Image
 from rest_framework import status
@@ -15,6 +15,7 @@ from rest_framework.parsers import JSONParser
 from rest_framework.test import APITestCase
 
 from bookings.models import ChalletHouse, CustomerProfile, Opinion, Reservation, Suggestion
+from bookings.tasks import run_profile_reservation_updates, send_email_notification_reservation
 from bookings.utils import my_date
 
 from .filters import HouseFilter, OpinionFilter, ReservationFilter
@@ -994,3 +995,61 @@ class ReservationsCustomerProfileUpdate(APITestCase):
         profile.refresh_from_db()
 
         self.assertEqual(profile.status, "R")
+
+
+@override_settings(
+    CELERY_BEAT_SCHEDULE={
+        "run_profile_reservation_updates": {
+            "task": "bookings.tasks.run_profile_reservation_updates",
+            "schedule": timedelta(seconds=0),
+        },
+    },
+    CELERY_TASK_ALWAYS_EAGER=True,
+    CELERY_TASK_EAGER_PROPOGATES=True,
+)
+class EmailAutoSendReservationCreate(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.house_nb_1 = ChalletHouse.objects.create(price_night=350, house_number=1)
+        cls.testuser = MyCustomUser.objects.create_user(
+            email="test@gmail.com",
+            name="testname",
+            surname="testsurname",
+            date_of_birth=date(1995, 10, 10),
+            password="adminadmin1",
+        )
+
+    @mock.patch("bookings.tasks.send_mail")
+    def test_reservation_creation(self, mail):
+        reservation_1 = Reservation.objects.create(
+            customer_profile=self.testuser.customerprofile,
+            reservation_owner=self.testuser,
+            house=self.house_nb_1,
+            start_date=date.today() + timedelta(5),
+            end_date=date.today() + timedelta(7),
+        )
+
+        data_clery = {
+            "start_dasdate": reservation_1.start_date,
+            "end_date": reservation_1.end_date,
+            "name": self.testuser.name,
+            "surname": self.testuser.surname,
+            "email": self.testuser.email,
+        }
+
+        send_email_notification_reservation(data_clery, reservation_1.reservation_number)
+        assert mail.called is True
+
+    @mock.patch("bookings.tasks.auxiliary.update_reservation_customerprofile")
+    def test_customer_profile_creation(self, mail):
+        reservation_2 = Reservation.objects.create(
+            customer_profile=self.testuser.customerprofile,
+            reservation_owner=self.testuser,
+            house=self.house_nb_1,
+            start_date=date.today() + timedelta(2),
+            end_date=date.today() + timedelta(4),
+        )
+
+        run_profile_reservation_updates.apply()
+        assert mail.called is True
+        self.assertEqual(len(mail.call_args[0]), 2)

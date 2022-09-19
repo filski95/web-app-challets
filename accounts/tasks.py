@@ -17,7 +17,7 @@ def send_email_notification(*args, **kwargs):
     message = f"""New user: {name} {surname} has been created \n
     email: {email}
     """
-    time.sleep(5)
+
     send_mail(
         subject=subject,
         message=message,
