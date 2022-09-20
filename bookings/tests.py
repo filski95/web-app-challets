@@ -997,16 +997,6 @@ class ReservationsCustomerProfileUpdate(APITestCase):
         self.assertEqual(profile.status, "R")
 
 
-@override_settings(
-    CELERY_BEAT_SCHEDULE={
-        "run_profile_reservation_updates": {
-            "task": "bookings.tasks.run_profile_reservation_updates",
-            "schedule": timedelta(seconds=0),
-        },
-    },
-    CELERY_TASK_ALWAYS_EAGER=True,
-    CELERY_TASK_EAGER_PROPOGATES=True,
-)
 class EmailAutoSendReservationCreate(APITestCase):
     @classmethod
     def setUpTestData(cls):

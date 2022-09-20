@@ -234,7 +234,7 @@ class DetailViewReservationSerializer(ReservationSerializer):
         else:
             instance.status = new_status
 
-        instance.save(cancellation=new_status)
+        instance.save(status_change=new_status)
         return instance
 
     def validate_status(self, value):

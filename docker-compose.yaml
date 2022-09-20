@@ -20,8 +20,8 @@ services:
       - postgres_data:/var/lib/postgresql/data
       # environment:
       # - "POSTGRES_HOST_AUTH_METHOD=trust" # allows connection without password
-    env_file:
-      - ./env/django.env
+      # env_file:
+      #   - ./env/django.env
 
   celery:
     build: .
@@ -32,8 +32,6 @@ services:
       - .:/app # bind mount - entire directory "." -> /working directory on the container
     env_file:
       - ./env/django.env
-    links:
-      - redis
     depends_on:
       - web
       - redis
@@ -47,9 +45,6 @@ services:
       - .:/app # bind mount - entire directory "." -> /working directory on the container
     env_file:
       - ./env/django.env
-    links:
-      - celery
-      - redis
     depends_on:
       - web
       - redis

@@ -35,7 +35,7 @@ def send_email_notification_reservation(data_celery, new_reservation_number, *ar
     - data for the email is being created in the signals.py and passed as data_celery argument.
     this is because celerey would not allow objects to be passed in between tasks and rest (serializing error)
 
-    **apart from that, during tests there was no way to query the freshly created reservations-> queries were sent to teh actual database
+    * apart from that, during tests there was no way to query the freshly created reservations-> queries were sent to teh actual database
     and objectdoesnotexist error was raised [in other words -> passing id instead of objects was not helpfull.]
 
     ** reservation_number at the time of this function is already created but not saved.
