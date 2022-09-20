@@ -189,8 +189,6 @@ class BasicReservationSerializer(ReservationSerializer):
         ]
 
     def get_fields(self, *args, **kwargs):
-        # TODO 2 options - either disable reservation objects for all users but admins or allow them to see only theirs
-        # TODO second option more expensive
 
         fields = super().get_fields(*args, **kwargs)
         from_challet_list = self.context.get("remove_house")
@@ -236,7 +234,7 @@ class DetailViewReservationSerializer(ReservationSerializer):
         else:
             instance.status = new_status
 
-        instance.save(cancellation=new_status)
+        instance.save(status_change=new_status)
         return instance
 
     def validate_status(self, value):

@@ -11,6 +11,7 @@ services:
       - ./env/django.env
     depends_on:
       - db
+      - redis
 
   db:
     image: postgres:13
@@ -19,8 +20,39 @@ services:
       - postgres_data:/var/lib/postgresql/data
       # environment:
       # - "POSTGRES_HOST_AUTH_METHOD=trust" # allows connection without password
+      # env_file:
+      #   - ./env/django.env
+
+  celery:
+    build: .
+    container_name: celery-worker
+    restart: always
+    command: celery -A core_project worker --loglevel=INFO
+    volumes:
+      - .:/app # bind mount - entire directory "." -> /working directory on the container
     env_file:
       - ./env/django.env
+    depends_on:
+      - web
+      - redis
+
+  celerybeat:
+    build: .
+    container_name: celery-beat
+    restart: always
+    command: celery -A core_project beat --loglevel=INFO
+    volumes:
+      - .:/app # bind mount - entire directory "." -> /working directory on the container
+    env_file:
+      - ./env/django.env
+    depends_on:
+      - web
+      - redis
+      - celery
+
+  redis:
+    image: "redis:alpine"
+    container_name: redis
 
 #named volumes must be listed
 volumes:

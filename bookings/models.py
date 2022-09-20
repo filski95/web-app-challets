@@ -8,6 +8,7 @@ from . import auxiliary
 
 
 class CustomerProfile(models.Model):
+    # hierarchy deployed in other modules when changing statuses
     hierarchy = {"N": 4, "R": 10, "S": 11}
     NEW_CUSTOMER = "N"
     REGULAR = "R"
@@ -111,12 +112,12 @@ class Reservation(models.Model):
     objects = auxiliary.ChalletSpotQuerySet()
 
     def save(self, *args, **kwargs):
-        # todo check if changed?
-        cancellation = kwargs.pop("cancellation", None)
 
-        # cancellation means that start and end date of a stay are transformed into Nones
-        # calculation of nights would crash -> if stmt to avoid it
-        if not cancellation:
+        status_change = kwargs.pop("status_change", None)
+        # status_change does not require nights calculations.
+        # nights are 0ed on the serializer update level while dates becoome None
+        # if statetement below added to avoid crashes with (None - None).days
+        if not status_change:
             self.nights = (self.end_date - self.start_date).days  # time delta days
         self.total_price = self.nights * self.house.price_night
         super().save(*args, **kwargs)

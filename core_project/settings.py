@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.0/ref/settings/
 """
 import os
+from datetime import timedelta
 from pathlib import Path
 
 from environs import Env
@@ -28,7 +29,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = env("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env.bool("DJANGO_DEBUG")
+DEBUG = os.environ.get("DJANGO_DEBUG")
 
 ALLOWED_HOSTS: list[str] = ["0.0.0.0"]
 
@@ -64,7 +65,7 @@ ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_USERNAME_REQUIRED = False
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -106,8 +107,8 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": "postgres",
-        "USER": env("POSTGRES_USER"),
-        "PASSWORD": env("POSTGRES_PASSWORD"),
+        "USER": os.environ.get("POSTGRES_USER"),
+        "PASSWORD": os.environ.get("POSTGRES_PASSWORD"),
         "HOST": "db",  # docker compose - service level
         "POST": 5432,  # default postgres
     }
@@ -188,3 +189,28 @@ REST_FRAMEWORK = {
 # storing uploaded files/images
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+
+
+# celery
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER")
+CELERY_RESULT_BACKEND = os.environ.get("CELERY_BACKEND")
+CELERY_TIMEZONE = os.environ.get("CELERY_TIMEZONE", "Europe/Berlin")
+
+CELERY_BEAT_SCHEDULE = {
+    "run_profile_reservation_updates": {
+        "task": "bookings.tasks.run_profile_reservation_updates",
+        "schedule": timedelta(minutes=30),
+    },
+}
+
+# for communication emails to new user's creation
+NOTIFICATION_EMAIL = os.environ.get("NOTIFICATION_EMAIL")
+# EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_BACKEND = os.environ.get("DEV_BACKEND")
+EMAIL_HOST = env("EMAIL_HOST_NAME")
+# email used to send notifications
+EMAIL_HOST_USER = os.environ.get("FROM_EMAIL")
+# password for hte email above
+EMAIL_HOST_PASSWORD = os.environ.get("PASSWORD_FROM_EMAIL")
+EMAIL_PORT = os.environ.get("EMAIL_PORT")  # ports are usually different than django's 25
+EMAIL_USE_TLS = True
