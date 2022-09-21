@@ -588,7 +588,6 @@ class CustomerChalletHousesAPITest(APITestCase):
         self.first_reservation.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(self.first_reservation.status, 1)
-
         data = {"status": 0}  # trying to set confirmed reser. to "not confirmed"
         response = self.client.put(url, data=data)
         self.first_reservation.refresh_from_db()

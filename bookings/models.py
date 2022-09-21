@@ -3,10 +3,10 @@ import io
 from accounts.models import MyCustomUser
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.files import File
 from django.core.validators import MaxValueValidator
 from django.db import models
 from reportlab.lib.pagesizes import letter
-from reportlab.lib.units import inch
 from reportlab.pdfgen import canvas
 
 from . import auxiliary
@@ -134,9 +134,6 @@ class Reservation(models.Model):
             raise ValidationError("End date must be later than start date")
 
 
-from django.core.files import File
-
-
 class ReservationConfrimation(models.Model):
     reservation = models.OneToOneField(Reservation, on_delete=models.CASCADE)
     saved_file = models.FileField(null=True, upload_to="confirmations/")
@@ -157,35 +154,42 @@ class ReservationConfrimation(models.Model):
         c.line(0, 750, w, 750)
         c.line(0, 50, w, 50)
         # draw an address above the first line to the left
-        c.drawString(20, 720, f"{res.house.address}")
-        c.drawString(w - 200, 780, f"Created at: {res.created_at.replace(microsecond=0)}")
+        c.drawString(20, 780, f"{res.house.address}")
+        c.drawString(w - 200, 780, f"Created at: {res.created_at.replace(microsecond=0,tzinfo=None)}")
 
         # write a string centered based on the middle [w/2]
-        c.drawCentredString(w / 2, 750, f"RESERVATION: {res.reservation_number}")
+        c.drawCentredString(w / 2, 730, f"RESERVATION: {res.reservation_number}")
 
         lines = {
             "Guest": res.reservation_owner.full_name,
             "Check in": res.start_date,
             "Check out": res.end_date,
             "Number of nights": res.nights,
-            "Status": res.status,
+            "House number": res.house.house_number,
+            "Total price": res.total_price,
+            "Status": res.get_status_display(),
         }
 
         if res.status == 0:
             lines.update(
                 {
-                    "*": "Please confirm your reservation on the website as soon as you are ceratin about your stay. Thank you!"
+                    "*": "Please confirm your reservation on the website as soon as you are certain about your stay. Thank you!"
                 }
             )
 
         main_text_object = c.beginText()
-        main_text_object.setTextOrigin(100, 640)
+        main_text_object.setTextOrigin(50, 640)
         main_text_object.setFont("Helvetica-Oblique", 14)
 
         for title, value in lines.items():
-            s = str(title) + ": " + str(value)
+            if title == "*":
+                s = str(title) + str(value)
+                main_text_object.setFillGray(0.4)
+                main_text_object.setFont("Helvetica-Oblique", 11)
+            else:
+                s = str(title) + ": " + str(value)
             main_text_object.textLine(s)
-            c.drawText(main_text_object)
+        c.drawText(main_text_object)
         c.save()
 
         file.name = f"{reservation.reservation_number}.pdf"

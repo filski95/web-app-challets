@@ -8,7 +8,7 @@ from rest_framework.authtoken.models import Token
 from bookings.models import Reservation
 
 from .models import CustomerProfile, ReservationConfrimation
-from .tasks import send_email_notification_reservation
+from .tasks import send_email_notification_reservation, send_order_confirmation_task
 
 
 @receiver(post_save, sender=MyCustomUser)
@@ -74,3 +74,12 @@ def _prepare_data_for_celery_email(instance):
     }
 
     return data
+
+
+@receiver(post_save, sender=ReservationConfrimation)
+def send_order_confrimation(sender, instance, created, **kwargs):
+
+    if created:
+
+        id = instance.id
+        send_order_confirmation_task.apply_async((id,), countdown=0)
