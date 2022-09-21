@@ -1,5 +1,4 @@
 import datetime
-from tracemalloc import start
 
 from accounts.models import MyCustomUser
 from django.db.models.signals import post_save
@@ -8,7 +7,7 @@ from rest_framework.authtoken.models import Token
 
 from bookings.models import Reservation
 
-from .models import CustomerProfile
+from .models import CustomerProfile, ReservationConfrimation
 from .tasks import send_email_notification_reservation
 
 
@@ -54,6 +53,13 @@ def update_reservation_number(sender, instance, created, **kwargs):
 
         data_celery = _prepare_data_for_celery_email(instance)
         send_email_notification_reservation.delay(data_celery, new_reservation_number)
+
+
+@receiver(post_save, sender=Reservation)
+def reservation_confirmation(sender, instance, created, **kwargs):
+    """this function must be placed below update_reservation_number -> to avoid reservation_number = None"""
+    if created:
+        confirmation = ReservationConfrimation.objects.create(reservation=instance)
 
 
 def _prepare_data_for_celery_email(instance):

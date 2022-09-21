@@ -170,6 +170,7 @@ class OpinionCreateListView(generics.ListCreateAPIView):
 
         if type(user) != AnonymousUser:
             serializer.save(author=user)
+            return
         else:
             serializer = self._check_if_anonymous_user_allowed_opinion(serializer)
 
