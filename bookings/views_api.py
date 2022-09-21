@@ -287,7 +287,7 @@ class ReservationsListViewSet(viewsets.ModelViewSet):
             past_reservations = [
                 r
                 for r in past_reservations
-                if r.end_date < my_date.today() and r.reservation_owner.id == request.user.id
+                if r.end_date is None or r.end_date < my_date.today() and r.reservation_owner.id == request.user.id
             ]
             serializer = self.get_serializer(past_reservations, many=True)
 

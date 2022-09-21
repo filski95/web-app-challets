@@ -121,7 +121,7 @@ class Reservation(models.Model):
 
         status_change = kwargs.pop("status_change", None)
         # status_change does not require nights calculations.
-        # nights are 0ed on the serializer update level while dates becoome None
+        # nights might bes 0ed on the serializer update level while dates becoome None
         # if statetement below added to avoid crashes with (None - None).days
         if not status_change:
             self.nights = (self.end_date - self.start_date).days  # time delta days
@@ -177,6 +177,7 @@ class ReservationConfrimation(models.Model):
                 }
             )
 
+        # below moves the cursor after text is drawn
         main_text_object = c.beginText()
         main_text_object.setTextOrigin(50, 640)
         main_text_object.setFont("Helvetica-Oblique", 14)

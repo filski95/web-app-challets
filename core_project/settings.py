@@ -207,7 +207,7 @@ CELERY_BEAT_SCHEDULE = {
 # for communication emails to new user's creation
 NOTIFICATION_EMAIL = os.environ.get("NOTIFICATION_EMAIL")
 # EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_BACKEND = os.environ.get("DEV_BACKEND")
+EMAIL_BACKEND = os.environ.get("PRODUCTION_BACKEND")
 EMAIL_HOST = env("EMAIL_HOST_NAME")
 # email used to send notifications
 EMAIL_HOST_USER = os.environ.get("FROM_EMAIL")
@@ -215,5 +215,3 @@ EMAIL_HOST_USER = os.environ.get("FROM_EMAIL")
 EMAIL_HOST_PASSWORD = os.environ.get("PASSWORD_FROM_EMAIL")
 EMAIL_PORT = os.environ.get("EMAIL_PORT")  # ports are usually different than django's 25
 EMAIL_USE_TLS = True
-
-# CELERY_TASK_ALWAYS_EAGER = True
