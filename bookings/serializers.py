@@ -19,6 +19,13 @@ class CustomerProfileSerializer(serializers.HyperlinkedModelSerializer):
         fields = ("joined", "status", "total_visits", "user", "url", "reservation_set")
 
 
+# below replaced by ordering on the reservation model. Possible performance issues as ordering is on server and not db
+# def to_representation(self, instance):
+#     response = super().to_representation(instance)
+#     response["reservation_set"] = sorted(response["reservation_set"], key=lambda x: x[-4:-1])
+#     return response
+
+
 class SuggestionSerializer(serializers.ModelSerializer):
 
     url = serializers.HyperlinkedIdentityField(read_only=True, view_name="bookings:suggestion_detail")

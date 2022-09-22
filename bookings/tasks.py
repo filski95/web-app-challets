@@ -3,11 +3,10 @@ from datetime import date, timedelta
 from celery import shared_task
 from celery.utils.log import get_task_logger
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMessage, send_mail
 
 from bookings import auxiliary
-from bookings.auxiliary import update_reservation_customerprofile
-from bookings.models import CustomerProfile, Reservation
+from bookings.models import CustomerProfile, Reservation, ReservationConfrimation
 
 logger = get_task_logger(__name__)
 
@@ -65,3 +64,22 @@ def send_email_notification_reservation(data_celery, new_reservation_number, *ar
     )
 
     logger.info(f"{send_email_notification_reservation.__name__} just ran")
+
+
+@shared_task
+def send_order_confirmation_task(id, *args, **kwargs):
+
+    instance = ReservationConfrimation.objects.get(id=id)
+
+    file = instance.saved_file
+    content = file.read()
+
+    subject = f"Reservation confirmation {instance.reservation.reservation_number}"
+    body = "See attached your reservation confirmation"
+    from_email = settings.EMAIL_HOST_USER
+
+    email = EmailMessage(subject, body, from_email, to=[instance.reservation.reservation_owner.email])
+    email.attach(file.name, content, "application/pdf")
+    email.send(fail_silently=False)
+
+    logger.info(f"{send_order_confirmation_task.__name__} just ran")

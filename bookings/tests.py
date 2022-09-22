@@ -1,10 +1,12 @@
 import datetime
 import io
 import os
+import shutil
 from datetime import date, timedelta
 from unittest import mock
 
 from accounts.models import MyCustomUser
+from django.conf import settings
 from django.db.models import Count, Q, Sum
 from django.test import TestCase
 from django.test.utils import override_settings
@@ -19,6 +21,8 @@ from bookings.tasks import run_profile_reservation_updates, send_email_notificat
 from bookings.utils import my_date
 
 from .filters import HouseFilter, OpinionFilter, ReservationFilter
+
+settings.MEDIA_ROOT += "test"
 
 
 class CustomerProfileTest(TestCase):
@@ -123,7 +127,8 @@ class CustomerProfileAPITest(APITestCase):
         return file
 
     def clean_foto(self, image):
-        path = "media/" + image.name
+        """Method implemented but as of now no longer used as the test script re-creates mediatest directory each time test run"""
+        path = settings.MEDIA_ROOT + "/" + image.name
         os.remove(path)
 
     def assertContainsAll(self, response, texts, status_code=200, msg_prefix="", html=False):
@@ -203,7 +208,7 @@ class CustomerProfileAPITest(APITestCase):
         suggestion = {"title": "suggestion", "main_text": "nice suggestion", "image": test_photo}
 
         response_post = self.client.post(url, data=suggestion)
-        self.clean_foto(test_photo)
+        # self.clean_foto(test_photo)
         self.assertEqual(response_post.status_code, status.HTTP_201_CREATED)
 
     def test_suggestion_detail_view(self):
@@ -227,7 +232,7 @@ class CustomerProfileAPITest(APITestCase):
         )
         self.assertEqual(response_put.status_code, status.HTTP_200_OK)
         self.assertContains(response_put, "changed title")
-        self.clean_foto(test_photo)
+        # self.clean_foto(test_photo)
 
     def test_suggestion_detail_view_admin(self):
         url = reverse("bookings:suggestion_detail", kwargs={"pk": self.suggestion1.pk})
@@ -588,7 +593,6 @@ class CustomerChalletHousesAPITest(APITestCase):
         self.first_reservation.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(self.first_reservation.status, 1)
-
         data = {"status": 0}  # trying to set confirmed reser. to "not confirmed"
         response = self.client.put(url, data=data)
         self.first_reservation.refresh_from_db()
@@ -1043,3 +1047,7 @@ class EmailAutoSendReservationCreate(APITestCase):
         run_profile_reservation_updates.apply()
         assert mail.called is True
         self.assertEqual(len(mail.call_args[0]), 2)
+
+
+dir = settings.MEDIA_ROOT
+shutil.rmtree(dir)
