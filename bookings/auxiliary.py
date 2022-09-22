@@ -46,7 +46,6 @@ def update_customer_profile_status_hierarchy(customer_profile, hierarchy):
     customer_profile.total_visits = F("total_visits") + 1
     customer_profile.save()
     customer_profile.refresh_from_db()
-
     if customer_profile.status == "S":
         pass
     else:

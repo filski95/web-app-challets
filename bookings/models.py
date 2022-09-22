@@ -83,6 +83,9 @@ class ChalletHouse(models.Model):
 
 
 class Reservation(models.Model):
+    class Meta:
+        ordering = ["id"]
+
     CONFIRMED = 1
     NOT_CONFIRMED = 0
     CANCELLED = 9
