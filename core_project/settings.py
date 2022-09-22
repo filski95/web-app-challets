@@ -207,7 +207,7 @@ CELERY_BEAT_SCHEDULE = {
 # for communication emails to new user's creation
 NOTIFICATION_EMAIL = os.environ.get("NOTIFICATION_EMAIL")
 # EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_BACKEND = os.environ.get("PRODUCTION_BACKEND")
+EMAIL_BACKEND = os.environ.get("DEV_BACKEND")
 EMAIL_HOST = env("EMAIL_HOST_NAME")
 # email used to send notifications
 EMAIL_HOST_USER = os.environ.get("FROM_EMAIL")

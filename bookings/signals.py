@@ -70,7 +70,7 @@ def reservation_confirmation(sender, instance, created, **kwargs):
         try:
             confirmation = ReservationConfrimation.objects.get(reservation=instance)
             # 0 is a default status, without this if block, program would generate two emails with the same attachment
-            # upon creation of a reservation. This is because, update_reservation_number ends up with a save on the Reservation model.
+            # upon creation of a reservation. This is because the func update_reservation_number ends up with a save on the Reservation model.
             # that means that there are 2 post_save calls, once with created=True, and once with False.
             # False would ideally mean = update, but it is not due to this issue. Since 0 is a default status,
             # here it is assumed that the reservation was just created and we can skip sending a new email
@@ -79,7 +79,7 @@ def reservation_confirmation(sender, instance, created, **kwargs):
 
         except ObjectDoesNotExist:
             return
-    confirmation.save()
+        confirmation.save()
 
 
 def _prepare_data_for_celery_email(instance):
@@ -99,5 +99,6 @@ def _prepare_data_for_celery_email(instance):
 @receiver(post_save, sender=ReservationConfrimation)
 def send_order_confrimation(sender, instance, created, **kwargs):
 
-    id = instance.id
-    send_order_confirmation_task.apply_async((id,), countdown=0)
+    if created is True or instance.reservation.status != 0:
+        id = instance.id
+        send_order_confirmation_task.apply_async((id,), countdown=0)
