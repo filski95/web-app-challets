@@ -1,13 +1,15 @@
 import datetime
 import io
-import json
 import os
+import shutil
 from datetime import date, timedelta
 from unittest import mock
 
 from accounts.models import MyCustomUser
+from django.conf import settings
 from django.db.models import Count, Q, Sum
 from django.test import TestCase
+from django.test.utils import override_settings
 from django.urls import reverse
 from PIL import Image
 from rest_framework import status
@@ -15,9 +17,12 @@ from rest_framework.parsers import JSONParser
 from rest_framework.test import APITestCase
 
 from bookings.models import ChalletHouse, CustomerProfile, Opinion, Reservation, Suggestion
+from bookings.tasks import run_profile_reservation_updates, send_email_notification_reservation
 from bookings.utils import my_date
 
 from .filters import HouseFilter, OpinionFilter, ReservationFilter
+
+settings.MEDIA_ROOT += "test"
 
 
 class CustomerProfileTest(TestCase):
@@ -122,7 +127,8 @@ class CustomerProfileAPITest(APITestCase):
         return file
 
     def clean_foto(self, image):
-        path = "media/" + image.name
+        """Method implemented but as of now no longer used as the test script re-creates mediatest directory each time test run"""
+        path = settings.MEDIA_ROOT + "/" + image.name
         os.remove(path)
 
     def assertContainsAll(self, response, texts, status_code=200, msg_prefix="", html=False):
@@ -202,7 +208,7 @@ class CustomerProfileAPITest(APITestCase):
         suggestion = {"title": "suggestion", "main_text": "nice suggestion", "image": test_photo}
 
         response_post = self.client.post(url, data=suggestion)
-        self.clean_foto(test_photo)
+        # self.clean_foto(test_photo)
         self.assertEqual(response_post.status_code, status.HTTP_201_CREATED)
 
     def test_suggestion_detail_view(self):
@@ -226,7 +232,7 @@ class CustomerProfileAPITest(APITestCase):
         )
         self.assertEqual(response_put.status_code, status.HTTP_200_OK)
         self.assertContains(response_put, "changed title")
-        self.clean_foto(test_photo)
+        # self.clean_foto(test_photo)
 
     def test_suggestion_detail_view_admin(self):
         url = reverse("bookings:suggestion_detail", kwargs={"pk": self.suggestion1.pk})
@@ -587,7 +593,6 @@ class CustomerChalletHousesAPITest(APITestCase):
         self.first_reservation.refresh_from_db()
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(self.first_reservation.status, 1)
-
         data = {"status": 0}  # trying to set confirmed reser. to "not confirmed"
         response = self.client.put(url, data=data)
         self.first_reservation.refresh_from_db()
@@ -994,3 +999,55 @@ class ReservationsCustomerProfileUpdate(APITestCase):
         profile.refresh_from_db()
 
         self.assertEqual(profile.status, "R")
+
+
+class EmailAutoSendReservationCreate(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.house_nb_1 = ChalletHouse.objects.create(price_night=350, house_number=1)
+        cls.testuser = MyCustomUser.objects.create_user(
+            email="test@gmail.com",
+            name="testname",
+            surname="testsurname",
+            date_of_birth=date(1995, 10, 10),
+            password="adminadmin1",
+        )
+
+    @mock.patch("bookings.tasks.send_mail")
+    def test_reservation_creation(self, mail):
+        reservation_1 = Reservation.objects.create(
+            customer_profile=self.testuser.customerprofile,
+            reservation_owner=self.testuser,
+            house=self.house_nb_1,
+            start_date=date.today() + timedelta(5),
+            end_date=date.today() + timedelta(7),
+        )
+
+        data_clery = {
+            "start_dasdate": reservation_1.start_date,
+            "end_date": reservation_1.end_date,
+            "name": self.testuser.name,
+            "surname": self.testuser.surname,
+            "email": self.testuser.email,
+        }
+
+        send_email_notification_reservation(data_clery, reservation_1.reservation_number)
+        assert mail.called is True
+
+    @mock.patch("bookings.tasks.auxiliary.update_reservation_customerprofile")
+    def test_customer_profile_creation(self, mail):
+        reservation_2 = Reservation.objects.create(
+            customer_profile=self.testuser.customerprofile,
+            reservation_owner=self.testuser,
+            house=self.house_nb_1,
+            start_date=date.today() + timedelta(2),
+            end_date=date.today() + timedelta(4),
+        )
+
+        run_profile_reservation_updates.apply()
+        assert mail.called is True
+        self.assertEqual(len(mail.call_args[0]), 2)
+
+
+dir = settings.MEDIA_ROOT
+shutil.rmtree(dir)
