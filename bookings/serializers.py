@@ -342,8 +342,7 @@ class ChalletHouseSerializer(serializers.ModelSerializer):
         # taken spots returns days in order
         # https://stackoverflow.com/questions/10058140/accessing-items-in-an-collections-ordereddict-by-index
         # below allows to get first value to check against without the need to create entire list.
-        first_day_taken = next(iter(taken_spots.keys()))
-
+        first_day_taken = next(iter(taken_spots_dict.keys()))
         # append all days which are not listed in taken_spots to free days list
         for day in all_days_till_next_year:
             if day < first_day_taken:

@@ -432,7 +432,7 @@ class CustomerChalletHousesAPITest(APITestCase):
 
         dates_str = [d for d in response.data.get("results")[0].get("already_reserved_nights")]
         reservation = self.first_reservation
-        no_content_list = [str(self.testuser.customerprofile), str(reservation.end_date)]
+        no_content_list = [str(self.testuser.customerprofile)]
         content_list = [str(reservation.start_date)]
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertNotContainsAll(response, no_content_list)
@@ -459,9 +459,10 @@ class CustomerChalletHousesAPITest(APITestCase):
 
         dates_str = [d for d in response.data.get("already_reserved_nights")]
         reservation = self.first_reservation
-        no_content_list = [str(self.testuser.customerprofile), str(reservation.end_date)]
+        no_content_list = [str(self.testuser.customerprofile)]
         content_list = [str(reservation.start_date)]
 
+        self.assertIn(reservation.end_date, response.data["free_spots_this_year"])
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertNotContainsAll(response, no_content_list)
         self.assertContainsAll(response, content_list)
