@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta
+from ftplib import all_errors
 
 from rest_framework import serializers
 
@@ -334,11 +335,13 @@ class ChalletHouseSerializer(serializers.ModelSerializer):
 
         for i in range(current_month, 13):
             weeks_month = c.monthdatescalendar(current_year, current_month)
+            # print(weeks_month)
             for one_week in weeks_month:
                 all_days_till_next_year.extend(one_week)
             current_month += 1
 
-        free_days = []
+        print(all_days_till_next_year)
+        free_days = {}
         # taken spots returns days in order
         # https://stackoverflow.com/questions/10058140/accessing-items-in-an-collections-ordereddict-by-index
         # below allows to get first value to check against without the need to create entire list.
@@ -348,12 +351,15 @@ class ChalletHouseSerializer(serializers.ModelSerializer):
             if day < first_day_taken:
                 continue
             else:
-                if day in taken_spots:
+                if day in taken_spots_dict:
                     continue
                 else:
-                    free_days.append(day)
+                    # sometimes days overlap - last week september/beginning October etc
+                    # possible duplicates in wrong order (last/early days get mixed up -> dictionary solves the problem)
+                    if day not in free_days:
+                        free_days[day] = True
 
-        return free_days
+        return free_days.keys()
 
 
 class RunUpdatesSerializer(serializers.Serializer):
