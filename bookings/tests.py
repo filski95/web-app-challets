@@ -56,7 +56,7 @@ class CustomerProfileTest(TestCase):
         self.assertEqual(profile.total_visits, 0)
         self.assertEqual(
             str(profile),
-            f"Profile of: {str(profile.user).title()} [ID: {profile.user.id}]; joined on {profile.joined}",
+            f"Profile of: {str(profile.user).title()} [ID: {profile.id}]; joined on {profile.joined}",
         )
 
     def test_automatic_update_customer_profile(self):

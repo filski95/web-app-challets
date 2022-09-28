@@ -1,5 +1,6 @@
+import calendar
+from collections import OrderedDict
 from datetime import date, datetime, timedelta
-from ftplib import all_errors
 
 from rest_framework import serializers
 
@@ -43,11 +44,22 @@ class OpinionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Opinion
-        fields = ("title", "main_text", "image", "name", "surname", "author", "url", "provided_on", "edited_on")
+        fields = (
+            "title",
+            "main_text",
+            "image",
+            "name",
+            "surname",
+            "author",
+            "url",
+            "provided_on",
+            "edited_on",
+            "rating",
+        )
 
     def get_fields(self, *args, **kwargs):
         """
-        logged in user does not have the option to provie user name and surname. List view [GET] does not show name and surname
+        logged in user does not have the option to provide user name and surname. List view [GET] does not show name and surname
         -> Only "Anonimowy Uzytkownik", so the sentinel user
         """
         fields = super().get_fields(*args, **kwargs)
@@ -177,11 +189,12 @@ class ReservationSerializer(DynamicFieldsModelSerializer):
         return attrs
 
 
-class BasicReservationSerializer(ReservationSerializer):
+class BasicReservationSerializer(serializers.ModelSerializer):
     """
     basic serializer for list views only, contains only basic info
     """
 
+    customer_profile = serializers.StringRelatedField()
     reservation_url = serializers.HyperlinkedIdentityField(read_only=True, view_name="bookings:reservation_detail")
 
     class Meta:
@@ -268,11 +281,6 @@ class DetailViewReservationSerializer(ReservationSerializer):
         return fields
 
 
-import calendar
-import time
-from collections import OrderedDict
-
-
 class ChalletHouseSerializer(serializers.ModelSerializer):
     url = serializers.HyperlinkedIdentityField(read_only=True, view_name="bookings:challet_house")
     # house_reservations = BasicReservationSerializer(many=True, not_allowed_fields=["id", "house"])
@@ -335,12 +343,10 @@ class ChalletHouseSerializer(serializers.ModelSerializer):
 
         for i in range(current_month, 13):
             weeks_month = c.monthdatescalendar(current_year, current_month)
-            # print(weeks_month)
             for one_week in weeks_month:
                 all_days_till_next_year.extend(one_week)
             current_month += 1
 
-        print(all_days_till_next_year)
         free_days = {}
         # taken spots returns days in order
         # https://stackoverflow.com/questions/10058140/accessing-items-in-an-collections-ordereddict-by-index

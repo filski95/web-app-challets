@@ -215,3 +215,26 @@ EMAIL_HOST_USER = os.environ.get("FROM_EMAIL")
 EMAIL_HOST_PASSWORD = os.environ.get("PASSWORD_FROM_EMAIL")
 EMAIL_PORT = os.environ.get("EMAIL_PORT")  # ports are usually different than django's 25
 EMAIL_USE_TLS = True
+
+# log sql queries in console
+LOGGING = {
+    "version": 1,
+    "filters": {
+        "require_debug_true": {
+            "()": "django.utils.log.RequireDebugTrue",
+        }
+    },
+    "handlers": {
+        "console": {
+            "level": "DEBUG",
+            "filters": ["require_debug_true"],
+            "class": "logging.StreamHandler",
+        }
+    },
+    "loggers": {
+        "django.db.backends": {
+            "level": "DEBUG",
+            "handlers": ["console"],
+        }
+    },
+}

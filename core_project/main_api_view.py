@@ -18,8 +18,9 @@ def api_root(request, format=None):
             "reservations": reverse("bookings:reservations", request=request, format=format),
             "past_reservations": reverse("bookings:past_reservations", request=request, format=format),
             "create_reservation": reverse("bookings:reservation_create", request=request, format=format),
-            "registration": "/api/registration/",
-            "rest_password": reverse("password_reset"),
+            "registration": reverse("rest_register", request=request, format=format),
+            "rest_password": reverse("password_reset", request=request, format=format),
             "run_updates": reverse("bookings:run_updates", request=request, format=format),
+            "stats": reverse("bookings:stats", request=request, format=format),
         }
     )

@@ -7,7 +7,7 @@ env
 notes.txt
 celerybeat*
 mediatest
-
+brudnopis.txt
 # Django #
 *.log
 *.pot

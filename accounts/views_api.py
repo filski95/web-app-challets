@@ -39,7 +39,7 @@ class UsersListCreate(APIView):
     serializer_class = MyCustomUserSerializer  # without it, browsable API displays basic form Content Type and Content
 
     def get_queryset(self):
-        users = MyCustomUser.objects.exclude(is_admin=True).select_related("customerprofile")
+        users = MyCustomUser.objects.select_related("customerprofile").exclude(is_admin=True)
         return users
 
     def get(self, request, format=None):
@@ -110,9 +110,10 @@ class UserDetail(APIView):
     serializer_class = MyCustomUserSerializer
 
     def get_object(self, slug):
+
         try:
             name, surname, identifier = slug.split("-")  # slug name-surname-identifier
-            user = MyCustomUser.objects.get(
+            user = MyCustomUser.objects.select_related("customerprofile").get(
                 Q(name__iexact=name), Q(surname__iexact=surname), Q(random_identifier=int(identifier))
             )
 
