@@ -4,7 +4,7 @@ from accounts.models import MyCustomUser
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.files import File
-from django.core.validators import MaxValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
@@ -28,11 +28,11 @@ class CustomerProfile(models.Model):
     surname = models.CharField(max_length=20, editable=False, null=True)  # from user model
 
     def __str__(self) -> str:
-        return f"Profile of: {str(self.user).title()} [ID: {self.user.id}]; joined on {self.joined}"
+        return f"Profile of: {str(self.user).title()} [ID: {self.id}]; joined on {self.joined}"
 
     @property
-    def full_name(self):
-        return f"{self.frist_name} {self.surname}"
+    def profile_user_repr(self):
+        return f"{self.first_name} {self.surname} [ID:{self.user.id}]"
 
 
 class CommunicationBaseModel(models.Model):
@@ -69,9 +69,15 @@ class Opinion(CommunicationBaseModel):
     # as some people may make a reservation through other source (phone)
     name = models.CharField(max_length=20, null=True, blank=True)
     surname = models.CharField(max_length=20, null=True, blank=True)
+    rating = models.SmallIntegerField(
+        null=True, blank=True, validators=[MaxValueValidator(limit_value=5), MinValueValidator(limit_value=1)]
+    )
 
 
 class ChalletHouse(models.Model):
+    class Meta:
+        ordering = ["house_number"]
+
     price_night = models.SmallIntegerField(verbose_name="price per night")
     house_number = models.PositiveSmallIntegerField(
         validators=[MaxValueValidator(limit_value=3)], primary_key=True, null=False, unique=True

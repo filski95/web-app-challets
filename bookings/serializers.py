@@ -1,5 +1,7 @@
+import calendar
+from collections import OrderedDict
 from datetime import date, datetime, timedelta
-from ftplib import all_errors
+from typing import Optional
 
 from rest_framework import serializers
 
@@ -43,11 +45,22 @@ class OpinionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Opinion
-        fields = ("title", "main_text", "image", "name", "surname", "author", "url", "provided_on", "edited_on")
+        fields = (
+            "title",
+            "main_text",
+            "image",
+            "name",
+            "surname",
+            "author",
+            "url",
+            "provided_on",
+            "edited_on",
+            "rating",
+        )
 
     def get_fields(self, *args, **kwargs):
         """
-        logged in user does not have the option to provie user name and surname. List view [GET] does not show name and surname
+        logged in user does not have the option to provide user name and surname. List view [GET] does not show name and surname
         -> Only "Anonimowy Uzytkownik", so the sentinel user
         """
         fields = super().get_fields(*args, **kwargs)
@@ -140,15 +153,17 @@ class ReservationSerializer(DynamicFieldsModelSerializer):
                 end < taken_spots.get(selected_house.house_number)[0]
                 or start >= taken_spots.get(selected_house.house_number)[-1]
             ):
+
                 return True
 
             else:
                 # first day may overlap -> end date = leave so we can have someone leaving and comming in on the same day
-                if new_reservation_days[1] not in taken_spots.get(
-                    selected_house.house_number
-                ) and new_reservation_days[-1] not in taken_spots.get(selected_house.house_number):
 
-                    return True
+                for day in new_reservation_days[1:]:
+                    if day in taken_spots.get(selected_house.house_number):
+                        raise exceptions.DatesNotAvailable(days=new_reservation_days)
+
+                return True
 
             raise exceptions.DatesNotAvailable(days=new_reservation_days)  # days att might be ditched if too exp.
         except IndexError:
@@ -177,11 +192,12 @@ class ReservationSerializer(DynamicFieldsModelSerializer):
         return attrs
 
 
-class BasicReservationSerializer(ReservationSerializer):
+class BasicReservationSerializer(serializers.ModelSerializer):
     """
     basic serializer for list views only, contains only basic info
     """
 
+    customer_profile = serializers.StringRelatedField()
     reservation_url = serializers.HyperlinkedIdentityField(read_only=True, view_name="bookings:reservation_detail")
 
     class Meta:
@@ -203,7 +219,7 @@ class BasicReservationSerializer(ReservationSerializer):
         user = self.context.get("request").user
 
         # dont show customer_profiel field to no admins
-        if not user.is_admin:
+        if user.is_anonymous is True or not user.is_admin:
             fields.pop("customer_profile")
 
         # house irrelevant in the challet list -> linked to one anyway
@@ -262,20 +278,18 @@ class DetailViewReservationSerializer(ReservationSerializer):
         fields.pop("id")  # dont want to have id displayed anywhere
 
         user = self.context.get("request").user
-        if not user.is_admin:
-            fields.pop("customer_profile")
+
+        try:
+            if not user.is_admin:
+                fields.pop("customer_profile")
+        except AttributeError:
+            pass
 
         return fields
 
 
-import calendar
-import time
-from collections import OrderedDict
-
-
 class ChalletHouseSerializer(serializers.ModelSerializer):
     url = serializers.HyperlinkedIdentityField(read_only=True, view_name="bookings:challet_house")
-    # house_reservations = BasicReservationSerializer(many=True, not_allowed_fields=["id", "house"])
     house_reservations = serializers.SerializerMethodField()
     already_reserved_nights = serializers.SerializerMethodField()
     free_spots_this_year = serializers.SerializerMethodField()
@@ -291,14 +305,13 @@ class ChalletHouseSerializer(serializers.ModelSerializer):
             "house_reservations",
         )
 
-    def get_already_reserved_nights(self, obj):
+    def get_already_reserved_nights(self, obj) -> list[str]:
 
-        house = ChalletHouse.objects.get(house_number=obj.house_number)
-        taken_spots = house.house_reservations.house_spots(house.house_number)
+        taken_spots = obj.house_reservations.house_spots(obj.house_number)
 
         return taken_spots[obj.house_number]
 
-    def get_house_reservations(self, obj):
+    def get_house_reservations(self, obj) -> Optional[list[Optional[str]]]:
         """
         house reservations will display reservations to their owners only..
         Admins will see all reservations [replacing nested serializer with this method to enable this "feature"]
@@ -307,20 +320,25 @@ class ChalletHouseSerializer(serializers.ModelSerializer):
         serializer_context = {"remove_house": True, "request": self.context.get("request")}
 
         if not user.is_authenticated:
-            reservations = []
+            reservations: list[Optional[str]] = []
             serializer = BasicReservationSerializer(reservations, many=True, context=serializer_context)
         elif user.is_admin:
-            reservations = Reservation.objects.filter(house=obj)
+            reservations = Reservation.objects.filter(house=obj).select_related(
+                "customer_profile__user", "reservation_owner"
+            )
             serializer = BasicReservationSerializer(reservations, many=True, context=serializer_context)
         else:
-            reservations = Reservation.objects.filter(reservation_owner=user, house=obj)
+            reservations = Reservation.objects.filter(reservation_owner=user, house=obj).select_related(
+                "customer_profile__user", "reservation_owner"
+            )
             serializer = BasicReservationSerializer(reservations, many=True, context=serializer_context)
 
         return serializer.data
 
-    def get_free_spots_this_year(self, obj):
+    def get_free_spots_this_year(self, obj) -> Optional[list[Optional[str]]]:
 
         taken_spots = obj.house_reservations.house_spots(obj.house_number)
+
         # taken_spots = taken_spots[obj.house_number]
         taken_spots_dict = OrderedDict()
 
@@ -335,16 +353,14 @@ class ChalletHouseSerializer(serializers.ModelSerializer):
 
         for i in range(current_month, 13):
             weeks_month = c.monthdatescalendar(current_year, current_month)
-            # print(weeks_month)
             for one_week in weeks_month:
                 all_days_till_next_year.extend(one_week)
             current_month += 1
 
-        print(all_days_till_next_year)
         free_days = {}
         # taken spots returns days in order
         # https://stackoverflow.com/questions/10058140/accessing-items-in-an-collections-ordereddict-by-index
-        # below allows to get first value to check against without the need to create entire list.
+        # below allows to get first value to check against without the need to create an entire list.
         first_day_taken = next(iter(taken_spots_dict.keys()))
         # append all days which are not listed in taken_spots to free days list
         for day in all_days_till_next_year:
@@ -359,7 +375,7 @@ class ChalletHouseSerializer(serializers.ModelSerializer):
                     if day not in free_days:
                         free_days[day] = True
 
-        return free_days.keys()
+        return [*free_days.keys()]
 
 
 class RunUpdatesSerializer(serializers.Serializer):

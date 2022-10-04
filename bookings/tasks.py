@@ -13,7 +13,7 @@ logger = get_task_logger(__name__)
 
 @shared_task
 def run_profile_reservation_updates():
-    end_date = date.today() + timedelta(10)
+    end_date = date.today()
     customer_hierarchy = CustomerProfile.hierarchy
     # excluding 9 - cancelled, 99 completed. Not confirmed are ok - we are not demanding users to confirm
     all_current_reservations = (

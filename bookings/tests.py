@@ -14,7 +14,7 @@ from django.urls import reverse
 from PIL import Image
 from rest_framework import status
 from rest_framework.parsers import JSONParser
-from rest_framework.test import APITestCase
+from rest_framework.test import APIClient, APITestCase
 
 from bookings.models import ChalletHouse, CustomerProfile, Opinion, Reservation, Suggestion
 from bookings.tasks import run_profile_reservation_updates, send_email_notification_reservation
@@ -56,7 +56,7 @@ class CustomerProfileTest(TestCase):
         self.assertEqual(profile.total_visits, 0)
         self.assertEqual(
             str(profile),
-            f"Profile of: {str(profile.user).title()} [ID: {profile.user.id}]; joined on {profile.joined}",
+            f"Profile of: {str(profile.user).title()} [ID: {profile.id}]; joined on {profile.joined}",
         )
 
     def test_automatic_update_customer_profile(self):
@@ -369,8 +369,8 @@ class CustomerChalletHousesAPITest(APITestCase):
             customer_profile=cls.testuser.customerprofile,
             reservation_owner=cls.testuser,
             house=cls.house_nb_1,
-            start_date=date(2022, 10, 10),
-            end_date=date(2022, 10, 15),
+            start_date=date(2022, 11, 6),
+            end_date=date(2022, 11, 8),
         )
 
         #! this seservation is meant to have the latest date should there be any more added later
@@ -481,7 +481,7 @@ class CustomerChalletHousesAPITest(APITestCase):
 
     def test_reservation_create_view(self):
 
-        data = {"start_date": date(2022, 10, 11), "end_date": date(2022, 12, 23), "house": 1}
+        data = {"start_date": date(2022, 10, 11), "end_date": date(2022, 11, 23), "house": 1}
         url = reverse("bookings:reservation_create")
 
         response = self.client.post(url, data=data)
@@ -518,9 +518,11 @@ class CustomerChalletHousesAPITest(APITestCase):
         - users can see only their reservations, - admins all reservations
         - unsafe methods not allowed (no creation)
         """
+
         # not authenticated request
         url = reverse("bookings:reservations")
         response = self.client.get(url)
+        print(response.data)
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         # only users reservation
         self.client.force_authenticate(self.testuser)
@@ -558,6 +560,7 @@ class CustomerChalletHousesAPITest(APITestCase):
 
         self.client.force_authenticate(self.testuser)
         response = self.client.get(url)
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertContainsAll(response, ["created_at", "updated_at", "reservation_owner"])
         self.assertNotContains(response, "id")  # dont want to display id ->res num enough
@@ -631,23 +634,24 @@ class CustomerChalletHousesAPITest(APITestCase):
         )
 
     @mock.patch("bookings.utils.my_date.today")
-    def test_validate_future_date_past_reservation_list_records(self, d):
+    def test_validate_future_date_past_reservation_list_records_common_user(self, d):
         """
         changing the return of my_date.today() to a date past reservations
         admin should see all of them
         """
         my_date.today.return_value = date(2022, 12, 25)
-        url = reverse("bookings:past_reservations")
         self.client.force_authenticate(self.admin_user)
+        url = reverse("bookings:past_reservations")
         response = self.client.get(url)
-
         self.assertEqual(len(response.data), Reservation.objects.count())
         self.client.logout()
 
+        self.client.login(email="test@gmail.com", password="adminadmin1")
+
         # user sees only his past reservations
-        self.client.force_authenticate(self.testuser)
-        response = self.client.get(url)
-        self.assertEqual(len(response.data), len(Reservation.objects.filter(reservation_owner=self.testuser)))
+        response_2 = self.client.get(url)
+        self.assertEqual(len(response_2.data), len(Reservation.objects.filter(reservation_owner=self.testuser)))
+        self.client.force_authenticate(user=None)
 
 
 class FiltersTestingAPI(APITestCase):

@@ -7,7 +7,7 @@ env
 notes.txt
 celerybeat*
 mediatest
-
+brudnopis.txt
 # Django #
 *.log
 *.pot
@@ -15,9 +15,10 @@ mediatest
 __pycache__
 db.sqlite3
 media
-
+schema.y*
 # Backup files # 
 *.bak 
+2022-10*
 
 # If you are using PyCharm # 
 # User-specific stuff
