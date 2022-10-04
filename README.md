@@ -34,7 +34,7 @@ Cancellation cannot be reverted. By default reservation is not confirmed and con
 Creation of reservation is inherently connected with a pdf confirmation which is generated automatically and sent over to the user email
 (Status changes trigger email send with new statys as well -> celery share task)
 
-Reservations views split them between current/future and past reservations. Reservation is marked as pased if the end_date is past today (celery periodic task)
+Reservations views split them between current/future and past reservations. Reservation is marked as completed if the end_date is past today (celery periodic task) -> does not apply for cancelled reservations.
 The same task updates customer profile with number of visits.
 
 
