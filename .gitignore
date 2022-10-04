@@ -18,6 +18,7 @@ media
 schema.y*
 # Backup files # 
 *.bak 
+2022-10*
 
 # If you are using PyCharm # 
 # User-specific stuff

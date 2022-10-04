@@ -518,9 +518,11 @@ class CustomerChalletHousesAPITest(APITestCase):
         - users can see only their reservations, - admins all reservations
         - unsafe methods not allowed (no creation)
         """
+
         # not authenticated request
         url = reverse("bookings:reservations")
         response = self.client.get(url)
+        print(response.data)
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
         # only users reservation
         self.client.force_authenticate(self.testuser)
@@ -549,17 +551,16 @@ class CustomerChalletHousesAPITest(APITestCase):
         url = reverse("bookings:reservation_detail", kwargs={"pk": self.first_reservation.id})
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-        print(response.data)
+
         # random user wont see sb's reservation detail view
         self.client.force_authenticate(self.testuser2)
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.client.logout()
 
-        print(response.data)
         self.client.force_authenticate(self.testuser)
         response = self.client.get(url)
-        print(response.data)
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertContainsAll(response, ["created_at", "updated_at", "reservation_owner"])
         self.assertNotContains(response, "id")  # dont want to display id ->res num enough

@@ -1,7 +1,4 @@
-import json
 from datetime import date
-from types import DynamicClassAttribute
-from typing import TypeVar, Union
 
 from accounts.models import MyCustomUser
 from django.contrib.auth.models import AnonymousUser
@@ -313,8 +310,8 @@ class ReservationsListViewSet(viewsets.ModelViewSet):
     pagination_class = MyCustomListOffsetPagination
 
     def get_queryset(self):
-        if getattr(self, "swagger_fake_view", False):  # drf-yasg comp
-            return Reservation.objects.none()
+        # if getattr(self, "swagger_fake_view", False):  # drf-yasg comp
+        #     return Reservation.objects.none()
 
         if self.request.user.is_admin is True:
             queryset = (

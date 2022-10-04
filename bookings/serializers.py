@@ -158,11 +158,12 @@ class ReservationSerializer(DynamicFieldsModelSerializer):
 
             else:
                 # first day may overlap -> end date = leave so we can have someone leaving and comming in on the same day
-                if new_reservation_days[1] not in taken_spots.get(
-                    selected_house.house_number
-                ) and new_reservation_days[-1] not in taken_spots.get(selected_house.house_number):
 
-                    return True
+                for day in new_reservation_days[1:]:
+                    if day in taken_spots.get(selected_house.house_number):
+                        raise exceptions.DatesNotAvailable(days=new_reservation_days)
+
+                return True
 
             raise exceptions.DatesNotAvailable(days=new_reservation_days)  # days att might be ditched if too exp.
         except IndexError:
@@ -359,7 +360,7 @@ class ChalletHouseSerializer(serializers.ModelSerializer):
         free_days = {}
         # taken spots returns days in order
         # https://stackoverflow.com/questions/10058140/accessing-items-in-an-collections-ordereddict-by-index
-        # below allows to get first value to check against without the need to create entire list.
+        # below allows to get first value to check against without the need to create an entire list.
         first_day_taken = next(iter(taken_spots_dict.keys()))
         # append all days which are not listed in taken_spots to free days list
         for day in all_days_till_next_year:

@@ -10,7 +10,6 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.0/ref/settings/
 """
 import os
-import sys
 from datetime import timedelta
 from pathlib import Path
 
@@ -217,7 +216,7 @@ CELERY_BEAT_SCHEDULE = {
 
 # for communication emails to new user's creation
 NOTIFICATION_EMAIL = os.environ.get("NOTIFICATION_EMAIL")
-# EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+# django.core.mail.backends.smtp.EmailBackend / django.core.mail.backends.console.EmailBackend
 EMAIL_BACKEND = os.environ.get("DEV_BACKEND")
 EMAIL_HOST = env("EMAIL_HOST_NAME")
 # email used to send notifications
