@@ -1,4 +1,5 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from ftplib import all_errors
 
 from rest_framework import serializers
 
@@ -267,22 +268,35 @@ class DetailViewReservationSerializer(ReservationSerializer):
         return fields
 
 
+import calendar
+import time
+from collections import OrderedDict
+
+
 class ChalletHouseSerializer(serializers.ModelSerializer):
     url = serializers.HyperlinkedIdentityField(read_only=True, view_name="bookings:challet_house")
     # house_reservations = BasicReservationSerializer(many=True, not_allowed_fields=["id", "house"])
     house_reservations = serializers.SerializerMethodField()
     already_reserved_nights = serializers.SerializerMethodField()
+    free_spots_this_year = serializers.SerializerMethodField()
 
     class Meta:
         model = ChalletHouse
-        fields = ("house_number", "price_night", "url", "already_reserved_nights", "house_reservations")
+        fields = (
+            "house_number",
+            "price_night",
+            "url",
+            "already_reserved_nights",
+            "free_spots_this_year",
+            "house_reservations",
+        )
 
     def get_already_reserved_nights(self, obj):
 
         house = ChalletHouse.objects.get(house_number=obj.house_number)
         taken_spots = house.house_reservations.house_spots(house.house_number)
 
-        return list(taken_spots.values())[0]
+        return taken_spots[obj.house_number]
 
     def get_house_reservations(self, obj):
         """
@@ -303,6 +317,49 @@ class ChalletHouseSerializer(serializers.ModelSerializer):
             serializer = BasicReservationSerializer(reservations, many=True, context=serializer_context)
 
         return serializer.data
+
+    def get_free_spots_this_year(self, obj):
+
+        taken_spots = obj.house_reservations.house_spots(obj.house_number)
+        # taken_spots = taken_spots[obj.house_number]
+        taken_spots_dict = OrderedDict()
+
+        # dict for O(1) lookups later
+        for day in taken_spots[obj.house_number]:
+            taken_spots_dict[day] = True
+
+        current_year = date.today().year
+        current_month = date.today().month
+        all_days_till_next_year = []
+        c = calendar.Calendar()
+
+        for i in range(current_month, 13):
+            weeks_month = c.monthdatescalendar(current_year, current_month)
+            # print(weeks_month)
+            for one_week in weeks_month:
+                all_days_till_next_year.extend(one_week)
+            current_month += 1
+
+        print(all_days_till_next_year)
+        free_days = {}
+        # taken spots returns days in order
+        # https://stackoverflow.com/questions/10058140/accessing-items-in-an-collections-ordereddict-by-index
+        # below allows to get first value to check against without the need to create entire list.
+        first_day_taken = next(iter(taken_spots_dict.keys()))
+        # append all days which are not listed in taken_spots to free days list
+        for day in all_days_till_next_year:
+            if day < first_day_taken:
+                continue
+            else:
+                if day in taken_spots_dict:
+                    continue
+                else:
+                    # sometimes days overlap - last week september/beginning October etc
+                    # possible duplicates in wrong order (last/early days get mixed up -> dictionary solves the problem)
+                    if day not in free_days:
+                        free_days[day] = True
+
+        return free_days.keys()
 
 
 class RunUpdatesSerializer(serializers.Serializer):
