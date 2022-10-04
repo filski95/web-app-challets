@@ -1,8 +1,7 @@
 
 Backend API for a web app imitating booking.com. Instead of being a platform for various places this app is designed to be website of a holiday house renting company with 3 houses in total.
 
-
-![](2022-10-04-11-22-58.png)
+<img width="932" alt="image" src="https://user-images.githubusercontent.com/93283105/193796508-3103814c-eeae-4760-ae62-7e0aa31036fb.png">
 
 Implemented CustomUserModel where user is depicted by a MyCustomUser model which in turn is linked with CustomerProfile where data such as number of visits is stored. User is not aware of the CustomerProfile model -> it stays in the background for statistics purposes.
 
@@ -15,11 +14,11 @@ Everyone can send a suggestion (neighbours etc, users without any visits etc.)
 _______________
 Chalet House view provides a list with already reserved dates:
 
-![](2022-10-04-11-23-32.png)
+<img width="336" alt="image" src="https://user-images.githubusercontent.com/93283105/193796603-a5baccb3-b730-4860-9f11-5446ecd61829.png">
 
 but also a list with free dates
+<img width="390" alt="image" src="https://user-images.githubusercontent.com/93283105/193796696-dc279979-3842-4ff8-a99d-d4c68f037764.png">
 
-![](2022-10-04-11-24-17.png)
 
 view can be filtered out/shrunk to just one house. Both above lists are computed based on the reservations and their start_end_dates when page is run.
 
