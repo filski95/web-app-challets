@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     "dj_rest_auth.registration",  # dj-rest-auth / django-allauth
     "django_filters",
     "crispy_forms",
+    "drf_spectacular",
 ]
 
 REST_AUTH_REGISTER_SERIALIZERS = {"REGISTER_SERIALIZER": "accounts.serializers.MyCustomUserSerializer"}
@@ -72,6 +73,9 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "debug_toolbar.middleware.DebugToolbarMiddleware",
+    # "django.middleware.cache.UpdateCacheMiddleware", # used for a site cache - troublesome as there is no way to override this when using low level cache (time)
+    "django.middleware.common.CommonMiddleware",
+    # "django.middleware.cache.FetchFromCacheMiddleware", #  # used for a site cache - troublesome as there is no way to override this when using low level cache (time)
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -184,8 +188,14 @@ REST_FRAMEWORK = {
     "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 2,
+    "DEFAULT_THROTTLE_CLASSES": [
+        "bookings.auxiliary.SustainedRateThrottle",
+        "bookings.auxiliary.BurstRateThrottle",
+        "rest_framework.throttling.AnonRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {"burst": "600/minute", "sustained": "1000/day", "anon": "60/minute"},
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
-
 
 # storing uploaded files/images
 MEDIA_URL = "/media/"
@@ -206,7 +216,7 @@ CELERY_BEAT_SCHEDULE = {
 
 # for communication emails to new user's creation
 NOTIFICATION_EMAIL = os.environ.get("NOTIFICATION_EMAIL")
-# EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+# django.core.mail.backends.smtp.EmailBackend / django.core.mail.backends.console.EmailBackend
 EMAIL_BACKEND = os.environ.get("DEV_BACKEND")
 EMAIL_HOST = env("EMAIL_HOST_NAME")
 # email used to send notifications
@@ -215,3 +225,51 @@ EMAIL_HOST_USER = os.environ.get("FROM_EMAIL")
 EMAIL_HOST_PASSWORD = os.environ.get("PASSWORD_FROM_EMAIL")
 EMAIL_PORT = os.environ.get("EMAIL_PORT")  # ports are usually different than django's 25
 EMAIL_USE_TLS = True
+
+# log sql queries in console
+LOGGING = {
+    "version": 1,
+    "filters": {
+        "require_debug_true": {
+            "()": "django.utils.log.RequireDebugTrue",
+        }
+    },
+    "handlers": {
+        "console": {
+            "level": "DEBUG",
+            "filters": ["require_debug_true"],
+            "class": "logging.StreamHandler",
+        }
+    },
+    "loggers": {
+        "django.db.backends": {
+            "level": "DEBUG",
+            "handlers": ["console"],
+        }
+    },
+}
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        # must be redis//redis as it points to the redis container's name
+        # localhost in docker-compose means container's localhost.
+        # * https://stackoverflow.com/questions/55410120/docker-celery-cannot-connect-to-redis
+        "LOCATION": "redis://redis:6379/0",
+        "OPTIONS": {
+            "db": "10",
+            "parser_class": "redis.connection.PythonParser",
+            "pool_class": "redis.BlockingConnectionPool",
+        },
+    }
+}
+CACHE_MIDDLEWARE_SECONDS = 15  # cache on the site is remembered for 60 seconds by default
+CACHE_MIDDLEWARE_KEY_PREFIX = ""  #  empty string if dont care/irrelevant
+CACHE_MIDDLEWARE_ALIAS = "default"  # default option
+
+
+# schema
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Houses Project",
+    "DESCRIPTION": "A simplified version of booking.com for a summer house rental",
+    "VERSION": "1.0.0",
+}

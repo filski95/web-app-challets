@@ -99,6 +99,9 @@ def _prepare_data_for_celery_email(instance):
 @receiver(post_save, sender=ReservationConfrimation)
 def send_order_confrimation(sender, instance, created, **kwargs):
 
-    if created is True or instance.reservation.status != 0:
+    # dont send new confirmations for completed/not confirmed if not created signal
+    # for 99 status (after customer came back home) its meaningless
+    # and the other one would be a reconfirmation which is not needed either.
+    if created is True or instance.reservation.status not in [0, 99]:
         id = instance.id
         send_order_confirmation_task.apply_async((id,), countdown=0)
