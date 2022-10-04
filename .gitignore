@@ -15,7 +15,7 @@ brudnopis.txt
 __pycache__
 db.sqlite3
 media
-
+schema.y*
 # Backup files # 
 *.bak 
 

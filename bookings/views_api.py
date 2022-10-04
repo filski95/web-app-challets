@@ -1,11 +1,24 @@
+import json
 from datetime import date
+from types import DynamicClassAttribute
+from typing import TypeVar, Union
 
 from accounts.models import MyCustomUser
 from django.contrib.auth.models import AnonymousUser
+from django.core.cache import cache
 from django.db import models
 from django.db.models import Avg, Case, Count, F, Max, Q, Sum, Value, When
 from django.db.models.functions import Cast, Concat, ExtractDay, ExtractMonth, Length, Round
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
 from django_filters import rest_framework as filters
+from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiParameter,
+    PolymorphicProxySerializer,
+    extend_schema,
+    inline_serializer,
+)
 from rest_framework import filters as rest_filters
 from rest_framework import generics
 from rest_framework import serializers as rest_serializers
@@ -34,6 +47,7 @@ from .serializers import (
 )
 
 
+@extend_schema(responses=CustomerProfileSerializer)
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
 def customer_profiles(request):
@@ -63,6 +77,7 @@ def customer_profiles(request):
         return Response(serializer.data, status.HTTP_200_OK)
 
 
+@extend_schema(responses=CustomerProfileSerializer)
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
 def single_profile(request, pk):
@@ -77,6 +92,19 @@ def single_profile(request, pk):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+@extend_schema(
+    request=RunUpdatesSerializer,
+    responses=RunUpdatesSerializer,
+    parameters=[
+        OpenApiParameter(
+            name="run_updates",
+            description="Run updates?",
+            default=False,
+            required=False,
+            type=bool,
+        )
+    ],
+)
 @api_view(["POST", "GET"])
 @permission_classes([IsAdminUser])
 def run_updates(request):
@@ -144,6 +172,9 @@ class SuggestionUserListCreateView(generics.ListCreateAPIView):
     pagination_class = MyCustomCursorPaginator
 
     def get_queryset(self):
+
+        if getattr(self, "swagger_fake_view", False):  # drf-yasg comp
+            return Suggestion.objects.none()
         queryset = figure_the_queryset_out(self.request, Suggestion, limit_list_view=True)
         return queryset
 
@@ -158,7 +189,9 @@ class SuggestionUserDetailView(generics.RetrieveUpdateAPIView):
     permission_classes = (IsAuthorOrAdmin,)
 
     def get_queryset(self):
-        queryset = figure_the_queryset_out(self.request, Opinion, limit_list_view=False)
+
+        queryset = figure_the_queryset_out(self.request, Suggestion, limit_list_view=False)
+
         return queryset
 
     serializer_class = SuggestionSerializer
@@ -172,6 +205,7 @@ class OpinionCreateListView(generics.ListCreateAPIView):
     ordering_fields = ["edited_on"]
     ordering = ["edited_on"]
     pagination_class = MyCustomCursorPaginator
+    throttle_classes = [auxiliary.CustomUseRateThrottle]
 
     def get_queryset(self):
 
@@ -215,6 +249,7 @@ class OpinionCreateListView(generics.ListCreateAPIView):
 class OpinionUserDetailView(generics.RetrieveUpdateAPIView):
     permission_classes = (IsAuthorOtherwiseViewOnly,)
     serializer_class = OpinionSerializer
+    throttle_classes = [auxiliary.CustomUseRateThrottle]
 
     def get_queryset(self):
 
@@ -236,14 +271,17 @@ class ChalletHouseListView(generics.ListAPIView):
     ordering_fields = ["house_number", "sum_nights", "num_reservations"]  # see annotate [get_queryset]
     search_fields = ["house_reservations__reservation_number"]
     pagination_class = MyCustomPageNumberPagination
+    throttle_classes = [auxiliary.SustainedRateThrottle]
 
     def get_queryset(self):
         # order by added due to pagination.
+
         queryset = (
-            ChalletHouse.objects.all()
+            ChalletHouse.objects.prefetch_related("house_reservations__customer_profile")
             .annotate(num_reservations=Count("house_reservations"), sum_nights=Sum("house_reservations__nights"))
             .order_by("house_number")
         )
+
         return queryset
 
 
@@ -254,9 +292,11 @@ class ChalletHouseDetailView(generics.RetrieveAPIView):
     def get_queryset(self):
 
         queryset = ChalletHouse.objects.all()
+
         return queryset
 
 
+@method_decorator(cache_page(3), name="dispatch")
 class ReservationsListViewSet(viewsets.ModelViewSet):
     """
     viewset limited to listing reservations:
@@ -273,20 +313,33 @@ class ReservationsListViewSet(viewsets.ModelViewSet):
     pagination_class = MyCustomListOffsetPagination
 
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):  # drf-yasg comp
+            return Reservation.objects.none()
 
         if self.request.user.is_admin is True:
-            queryset = Reservation.objects.filter(Q(end_date__gte=my_date.today())).order_by("house", "start_date")
+            queryset = (
+                Reservation.objects.filter(Q(end_date__gte=my_date.today()))
+                .select_related("customer_profile__user")
+                .order_by("house", "start_date")
+            )
         else:
-            queryset = Reservation.objects.filter(
-                Q(reservation_owner__id=self.request.user.id) & ~Q(start_date=None) & Q(end_date__gte=my_date.today())
-            ).order_by("house", "start_date")
+            queryset = (
+                Reservation.objects.select_related("customer_profile__user")
+                .filter(
+                    Q(reservation_owner__id=self.request.user.id)
+                    & ~Q(start_date=None)
+                    & Q(end_date__gte=my_date.today())
+                )
+                .order_by("house", "start_date")
+            )
 
         queryset = self.filter_queryset(queryset)
+
         return queryset
 
     @action(detail=False)
     def past_reservations(self, request, *args, **kwargs):
-        past_reservations = Reservation.objects.all().select_related("customer_profile")
+        past_reservations = Reservation.objects.all().select_related("customer_profile__user", "reservation_owner")
 
         if request.user.is_admin is True:
 
@@ -295,10 +348,11 @@ class ReservationsListViewSet(viewsets.ModelViewSet):
 
         # if not admin then limit output to user's reservations only.
         else:
+
             past_reservations = [
                 r
                 for r in past_reservations
-                if r.end_date is None or r.end_date < my_date.today() and r.reservation_owner.id == request.user.id
+                if (r.end_date is None or r.end_date < my_date.today()) and r.reservation_owner.id == request.user.id
             ]
             serializer = self.get_serializer(past_reservations, many=True)
 
@@ -315,6 +369,7 @@ class ReservationRetrieveUpdate(generics.RetrieveUpdateAPIView):
         return queryset
 
     def perform_update(self, serializer):
+
         obj = self.get_object()
 
         serializer.save(obj=obj)
@@ -322,8 +377,12 @@ class ReservationRetrieveUpdate(generics.RetrieveUpdateAPIView):
     def get_serializer_class(self):
 
         # if admin then return a default serializer with complete option as well (status)
-        if self.request.user.is_admin:
-            return super().get_serializer_class()
+
+        try:
+            if self.request.user.is_admin:
+                return super().get_serializer_class()
+        except AttributeError:
+            pass
 
         # otherwise let the user only see 3 options -> complete option done automatically after stay
         CONFIRMED = 1
@@ -344,6 +403,18 @@ class ReservationRetrieveUpdate(generics.RetrieveUpdateAPIView):
 
         return TweakedDetailViewReservationSerializer
 
+    # @extend_schema(
+    #     responses={
+    #         200: PolymorphicProxySerializer(
+    #             component_name="Reservation",
+    #             serializers=[DetailViewReservationSerializer, "TweakedDetailViewReservationSerializer"],
+    #             resource_type_field_name="type",
+    #         )
+    #     }
+    # )
+    def retrieve(self, request, *args, **kwargs):
+        return super().retrieve(request, *args, **kwargs)
+
 
 class ReservationCreateView(generics.CreateAPIView):
     permission_classes = (IsAuthenticated,)
@@ -361,6 +432,20 @@ class StatisticsView(APIView):
 
     permission_classes = (IsAdminUser,)
 
+    @extend_schema(
+        responses={200: inline_serializer("statistics_view", fields={"info": models.CharField()})},
+        examples=[
+            OpenApiExample(
+                "Example 1",
+                summary="list of all statistics for given 'category' -> json. ",
+                description="4 categories in total: users, reservations, houses,opinions. By default all statistics are shown but optionally could be shrunk based on the url '?request_data'",
+                value={
+                    "challet_houses": {"total_reservations_house": [{"house_number": 1, "number_of_reservations": 50}]}
+                },
+                status_codes=[200],
+            ),
+        ],
+    )
     def get(self, request, format=None):
         """
         main function of the view. Lets client choose statistics for one of the given models
@@ -368,7 +453,7 @@ class StatisticsView(APIView):
         - if request_data is not provided or is empty all statistics will be returned
         """
         url_params = request.query_params.get("request_data")
-        # this dict must be predetermined for clarity + it is passed to respective functions
+        # this dict  predetermined for clarity + it is passed to respective functions
         return_data = {"users": {}, "reservations": {}, "opinions": {}, "challet_houses": {}}
 
         list_of_functions = [
@@ -545,6 +630,7 @@ class StatisticsView(APIView):
 
     def _prepare_opinions(self, return_data):
         # * computes basics stats: total number of opinions / frequency of images attached to opinions / longest_body
+
         opinions_details = (
             Opinion.objects.alias(img=Length("image"))
             # null for images did not work, if not provided it is "" in db apparently
